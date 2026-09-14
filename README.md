@@ -1,6 +1,8 @@
-# The Daily Post — News Portal
+# The Daily Post
 
-A production-ready news/media portal built with Next.js 16, featuring a Washington Post-inspired editorial design, Clerk authentication, Stripe subscriptions, real-time live blog, AI-powered features, and Material Design 3 mobile UX.
+> Breaking news, politics, opinion & analysis — a production-ready news portal built with Next.js 16, Clerk authentication, Stripe subscriptions, and real-time live blog.
+
+[![npm](https://img.shields.io/npm/v/@njutawan/the-daily-post)](https://www.npmjs.com/package/@njutawan/the-daily-post) [![Release](https://img.shields.io/github/v/release/njutawan/the-daily-post)](https://github.com/njutawan/the-daily-post/releases)
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-black) ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue) ![Tailwind](https://img.shields.io/badge/Tailwind-4-38bdf8) ![Clerk](https://img.shields.io/badge/Auth-Clerk-6c47ff) ![Prisma](https://img.shields.io/badge/DB-Prisma-2d3748)
 
@@ -167,4 +169,4 @@ See `.env.example` for all variables.
 
 ## License
 
-Private project. All rights reserved.
+MIT — see [LICENSE](./LICENSE).
