@@ -1,0 +1,50 @@
+{
+  "capitol": [
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/4b988717a383.jpg",
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/364b83d6a1b3.jpg"
+  ],
+  "war": [
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/074e7204c7b8.jpg",
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/f7545620396b.jpg"
+  ],
+  "ai": [
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/607f1b28dee7.jpg",
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/bd046f99d52b.jpg"
+  ],
+  "market": [
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/059af4ea4249.jpeg",
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/8975c64ac70d.jpg"
+  ],
+  "climate": [
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/7d8032ce576f.jpeg",
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/e2361b7e5ad2.jpg"
+  ],
+  "sports": [
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/c9b5db54034d.jpg",
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/09bcf84fa832.jpg"
+  ],
+  "court": [
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/f722507f03fe.jpg",
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/f827036b6c1d.jpg"
+  ],
+  "storm": [
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/b136cbd66cfd.jpg",
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/7181a38aac5d.jpg"
+  ],
+  "election": [
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/5659a23d1293.jpg",
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/b2890d46c35b.jpg"
+  ],
+  "city": [
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/5692c62142f9.jpg",
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/04f5574c4b1c.jpg"
+  ],
+  "protest": [
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/b9d39c5654f6.jpg",
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/e5311694ae51.jpg"
+  ],
+  "lab": [
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/2b3eb0c4333e.jpg",
+    "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/1d98944bba5d.jpg"
+  ]
+}

@@ -1,0 +1,237 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String?
+  // Auth: reader | editor | admin (member is a subscription tier, not a role)
+  role         String   @default("reader")
+  // Clerk linkage (nullable — local users in demo mode have no Clerk id)
+  clerkId      String?  @unique
+  avatarUrl    String?
+  bio          String?
+  // Subscription tier: free | digital | allaccess
+  subTier      String   @default("free")
+  subStatus    String   @default("active") // active | canceled | expired | past_due
+  subExpiresAt DateTime?
+  // Editorial
+  byline       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // An editor can be the author of many articles AND the reviewer of many
+  // articles. Prisma requires both relations to be named when there is more
+  // than one between the same two models.
+  articles         Article[]      @relation("AuthoredArticles")
+  reviewedArticles Article[]      @relation("ReviewedArticles")
+  reviews        ArticleReview[]
+  payments       Payment[]
+  readingHistory ReadingHistory[]
+  savedArticles  SavedArticle[]
+
+  @@index([role])
+  @@index([subTier])
+}
+
+model Subscriber {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  source    String   @default("homepage")
+  verified  Boolean  @default(false)
+  verifyToken String?
+  createdAt DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────────────────────
+// Editorial workflow — replaces the old simple Post model.
+// Article lifecycle: draft → pending_review → published | rejected
+// ─────────────────────────────────────────────────────────────
+model Article {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  excerpt     String?
+  // Markdown/MDX body content
+  body        String   @default("")
+  // Category/section: politics | world | business | tech | opinion | sports | climate | culture
+  category    String   @default("politics")
+  // Tags stored as comma-separated string (SQLite has no native array)
+  tags        String   @default("")
+  heroImage   String?
+  heroCaption String?
+  // Status: draft | pending_review | published | rejected | archived
+  status      String   @default("draft")
+  // Editor-author relationship
+  authorId    String
+  author      User     @relation("AuthoredArticles", fields: [authorId], references: [id])
+  // Review info
+  reviewerId  String?
+  reviewer    User?    @relation("ReviewedArticles", fields: [reviewerId], references: [id])
+  reviewNotes String?  // admin feedback when rejected/needs changes
+  // Publishing
+  publishedAt DateTime?
+  featured    Boolean  @default(false)
+  // Scheduling
+  scheduledAt DateTime?
+  // Stats (denormalized for fast reads)
+  viewCount   Int      @default(0)
+  commentCount Int      @default(0)
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  reviews        ArticleReview[]
+  readingHistory ReadingHistory[]
+  savedArticles  SavedArticle[]
+
+  @@index([status])
+  @@index([authorId])
+  @@index([category])
+  @@index([publishedAt])
+}
+
+model ArticleReview {
+  id         String   @id @default(cuid())
+  articleId  String
+  article    Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  reviewerId String
+  reviewer   User     @relation(fields: [reviewerId], references: [id])
+  // approved | rejected | requested_changes
+  action     String
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  @@index([articleId])
+  @@index([reviewerId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  articleSlug String
+  author    String
+  body      String
+  parentId  String?
+  upvotes   Int      @default(0)
+  userId    String?
+  createdAt DateTime @default(now())
+  reports   CommentReport[]
+
+  @@index([articleSlug])
+  @@index([parentId])
+  @@index([userId])
+}
+
+model CommentReport {
+  id        String   @id @default(cuid())
+  commentId String
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  reason    String
+  reporter  String
+  createdAt DateTime @default(now())
+
+  @@index([commentId])
+}
+
+model ArticleView {
+  id        String   @id @default(cuid())
+  articleSlug String
+  ipHash    String   @default("anonymous")
+  createdAt DateTime @default(now())
+
+  @@index([articleSlug])
+  @@index([createdAt])
+  @@index([articleSlug, ipHash])
+}
+
+model TypoReport {
+  id        String   @id @default(cuid())
+  articleSlug String
+  quotedText String
+  correction String
+  reporter   String   @default("anonymous")
+  status     String   @default("pending") // pending | applied | dismissed
+  createdAt DateTime @default(now())
+
+  @@index([articleSlug])
+  @@index([status])
+}
+
+model ReadingSession {
+  id        String   @id @default(cuid())
+  articleSlug String
+  ipHash    String   @default("anonymous")
+  scrollDepth Int     @default(0) // 0-100 percent reached
+  timeOnPage  Int     @default(0) // seconds spent
+  createdAt DateTime @default(now())
+
+  @@index([articleSlug])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Member area — subscriptions, payments, reading history, saved
+// ─────────────────────────────────────────────────────────────
+model Payment {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  // Amount in minor units (cents) to avoid float math
+  amount     Int
+  currency   String   @default("USD")
+  // digital | allaccess
+  tier       String
+  // monthly | annual
+  billingCycle String @default("monthly")
+  // succeeded | pending | failed | refunded
+  status     String   @default("pending")
+  // Mock provider: mock | stripe | paddle
+  provider   String   @default("mock")
+  providerInvoice String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([status])
+  @@index([tier])
+}
+
+model ReadingHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  articleId String
+  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  // progress percentage 0-100
+  progress  Int      @default(0)
+  lastReadAt DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@unique([userId, articleId])
+  @@index([userId])
+  @@index([articleId])
+}
+
+model SavedArticle {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  articleId String
+  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, articleId])
+  @@index([userId])
+}
