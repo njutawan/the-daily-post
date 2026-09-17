@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
-import { Search as SearchIcon, ArrowLeft, Compass } from "lucide-react";
+import { Search as SearchIcon, ArrowLeft } from "lucide-react";
 
 export default function NotFound() {
   return (

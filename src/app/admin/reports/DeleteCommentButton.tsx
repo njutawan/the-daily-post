@@ -4,13 +4,7 @@ import * as React from "react";
 import { Trash2, Loader2, Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-export function DeleteCommentButton({
-  commentId,
-  reportId,
-}: {
-  commentId: string;
-  reportId: string;
-}) {
+export function DeleteCommentButton({ commentId }: { commentId: string }) {
   const [loading, setLoading] = React.useState(false);
   const [confirming, setConfirming] = React.useState(false);
   const [done, setDone] = React.useState(false);

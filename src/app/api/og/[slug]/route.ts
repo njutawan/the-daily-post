@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getArticleBySlug, allArticles, type Article } from "@/data/articles";
+import { getArticleBySlug, type Article } from "@/data/articles";
 import { generateOGImage } from "@/lib/og-image";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";

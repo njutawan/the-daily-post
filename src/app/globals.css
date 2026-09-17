@@ -154,11 +154,6 @@
   color: #111;
 }
 
-/* Crisp thin newspaper rules */
-.rule-y > * + * {
-  border-left: 1px solid oklch(0.922 0 0);
-}
-
 /* Subtle headline hover underline */
 .headline-link {
   text-underline-offset: 4px;
@@ -205,15 +200,6 @@
   animation-play-state: paused;
 }
 
-@keyframes spin-slow {
-  to {
-    transform: rotate(360deg);
-  }
-}
-.animate-spin-slow {
-  animation: spin-slow 3s linear infinite;
-}
-
 /* Fade-in reveal for live updates and cards */
 @keyframes reveal-up {
   from {
@@ -233,8 +219,7 @@
 @media print {
   header,
   footer,
-  nav,
-  .no-print {
+  nav {
     display: none !important;
   }
   body {
@@ -281,58 +266,3 @@ html {
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
-
-/* ===== Material Design 3 — Elevation & Shape System ===== */
-
-/* MD3 tonal elevation — surface tint at higher levels */
-.md3-elevation-1 {
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.12), 0 1px 3px 0 rgba(0, 0, 0, 0.08);
-}
-.md3-elevation-2 {
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.14), 0 2px 6px 0 rgba(0, 0, 0, 0.10);
-}
-.md3-elevation-3 {
-  box-shadow: 0 2px 6px 0 rgba(0, 0, 0, 0.16), 0 4px 12px 0 rgba(0, 0, 0, 0.12);
-}
-
-/* MD3 shape scale — rounded corners */
-.md3-shape-sm { border-radius: 8px; }
-.md3-shape-md { border-radius: 12px; }
-.md3-shape-lg { border-radius: 16px; }
-.md3-shape-xl { border-radius: 28px; }
-
-/* MD3 state layer — hover/press overlay on interactive elements */
-.md3-state-layer {
-  position: relative;
-  overflow: hidden;
-}
-.md3-state-layer::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: currentColor;
-  opacity: 0;
-  transition: opacity 0.2s;
-  pointer-events: none;
-}
-@media (hover: hover) {
-  .md3-state-layer:hover::after { opacity: 0.08; }
-}
-.md3-state-layer:active::after { opacity: 0.12; }
-
-/* MD3 FAB — Floating Action Button */
-.md3-fab {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  height: 56px;
-  min-width: 56px;
-  padding: 0 16px;
-  border-radius: 16px;
-  font-weight: 600;
-  font-size: 0.875rem;
-  transition: box-shadow 0.2s, transform 0.15s;
-}
-.md3-fab:hover { box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.20), 0 2px 8px 0 rgba(0, 0, 0, 0.14); }
-.md3-fab:active { transform: scale(0.95); }

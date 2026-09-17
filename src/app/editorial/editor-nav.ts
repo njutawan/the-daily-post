@@ -4,7 +4,6 @@ import {
   Plus,
   HelpCircle,
   PenLine,
-  type LucideIcon,
 } from "lucide-react";
 import type { NavItem } from "@/components/dashboard/shell";
 

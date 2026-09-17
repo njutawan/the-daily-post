@@ -27,12 +27,6 @@ export interface DetectedEntity {
   name: string;
 }
 
-const HONORIFICS = new Set([
-  "Mr", "Mrs", "Ms", "Dr", "Prof", "Sen", "Sen.",
-  "Gov", "President", "Rep", "Sen", "Mayor", "Judge",
-  "Ambassador", "Secretary", "General", "Colonel",
-]);
-
 const ORG_KEYWORDS = new Set([
   "Inc", "Inc.", "Corp", "Corp.", "Company", "Co.", "Co",
   "Department", "Dept", "Bureau", "Agency", "Authority",

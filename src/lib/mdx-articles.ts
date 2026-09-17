@@ -65,17 +65,6 @@ export function getMDXArticle(slug: string): MDXArticle | null {
   }
 }
 
-/** Get all articles (for listing / homepage). */
-export function getAllMDXArticles(): MDXArticle[] {
-  return getArticleSlugs()
-    .map((slug) => getMDXArticle(slug))
-    .filter((a): a is MDXArticle => a !== null)
-    .sort(
-      (a, b) =>
-        new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-    );
-}
-
 /**
  * Extract h2/h3 headings from MDX content for table of contents.
  * Looks for ## and ### markdown headings.

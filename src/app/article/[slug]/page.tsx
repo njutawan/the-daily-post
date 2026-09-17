@@ -168,7 +168,6 @@ export default async function ArticlePage({
   const imageUrl = mdxArticle?.imageUrl || dataArticle!.imageUrl;
   const imageCaption = mdxArticle?.imageCaption || dataArticle!.imageCaption;
   const imageCredit = mdxArticle?.imageCredit || dataArticle!.imageCredit;
-  const isBreaking = mdxArticle?.breaking || dataArticle!.breaking;
   const isPremium = Boolean(mdxArticle?.premium || dataArticle?.premium);
   const articleSlug = slug;
 
@@ -423,7 +422,7 @@ export default async function ArticlePage({
           {/* Listen to article (TTS) */}
           {paragraphs[0] && (
             <div className="mt-4">
-              <ListenToArticle text={paragraphs[0]} title={title} />
+              <ListenToArticle text={paragraphs[0]} />
             </div>
           )}
 

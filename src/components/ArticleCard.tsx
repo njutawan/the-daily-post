@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
-import { Clock, MessageSquare, Lock } from "lucide-react";
+import { Clock, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Article } from "@/data/articles";
 

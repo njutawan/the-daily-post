@@ -7,11 +7,10 @@ import { cn } from "@/lib/utils";
 type ListenToArticleProps = {
   /** The article body text to synthesize. */
   text: string;
-  title: string;
   className?: string;
 };
 
-export function ListenToArticle({ text, title, className }: ListenToArticleProps) {
+export function ListenToArticle({ text, className }: ListenToArticleProps) {
   const [audioUrl, setAudioUrl] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [loadingFull, setLoadingFull] = React.useState(false);
