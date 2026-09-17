@@ -1,7 +1,5 @@
 "use client";
 
-import * as React from "react";
-
 const STORAGE_KEY = "tdp:free-reads";
 const FREE_LIMIT = 5;
 
@@ -67,28 +65,6 @@ export function getReadStatus(): { count: number; remaining: number; limit: numb
     remaining: Math.max(0, FREE_LIMIT - tracker.count),
     limit: FREE_LIMIT,
   };
-}
-
-/**
- * Check if a user has hit the paywall.
- * Returns true if they've read FREE_LIMIT articles and haven't subscribed.
- */
-export function isPaywalled(): boolean {
-  const { count } = getReadStatus();
-  return count >= FREE_LIMIT;
-}
-
-/**
- * React hook to get live read status.
- */
-export function useReadStatus() {
-  const [status, setStatus] = React.useState({ count: 0, remaining: FREE_LIMIT, limit: FREE_LIMIT });
-
-  React.useEffect(() => {
-    setStatus(getReadStatus());
-  }, []);
-
-  return status;
 }
 
 export { FREE_LIMIT };

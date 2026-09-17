@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useUnifiedAuth } from "@/components/unified-auth-provider";
-import { trackRead, isPaywalled, getReadStatus, FREE_LIMIT } from "@/lib/paywall";
+import { trackRead, getReadStatus, FREE_LIMIT } from "@/lib/paywall";
 import { Lock, Check } from "lucide-react";
 
 type PaywallGateProps = {

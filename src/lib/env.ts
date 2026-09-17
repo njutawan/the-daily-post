@@ -35,8 +35,6 @@ export const env = {
   LOG_LEVEL: getEnv("LOG_LEVEL", "info") as "debug" | "info" | "warn" | "error",
 };
 
-export type Env = typeof env;
-
 /** Convenience re-exports */
 export const SITE_URL = env.NEXT_PUBLIC_SITE_URL;
 export const ADMIN_PASSWORD = env.ADMIN_PASSWORD;

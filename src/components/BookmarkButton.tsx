@@ -50,10 +50,6 @@ export function useBookmarks() {
   return bookmarks;
 }
 
-export function isBookmarked(slug: string): boolean {
-  return readBookmarks().includes(slug);
-}
-
 /**
  * Toggle a bookmark locally (localStorage). Used for static articles
  * that don't exist in the database, and as a fallback when the server

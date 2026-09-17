@@ -16,7 +16,6 @@
  *   - allaccess  : digital + print + premium newsletters
  */
 
-import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 
@@ -53,14 +52,6 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 }
 
 /**
- * Require the user to be signed in. Returns the user, or null if not.
- * Callers should redirect to /member when null.
- */
-export async function requireUser(): Promise<SessionUser | null> {
-  return getSessionUser();
-}
-
-/**
  * Require the user to have one of the given roles. Returns the user
  * when authorized, otherwise null (caller should redirect or render 403).
  */
@@ -71,13 +62,6 @@ export async function requireRole(
   if (!user) return null;
   if (!roles.includes(user.role)) return null;
   return user;
-}
-
-/**
- * Whether Clerk is the active auth backend.
- */
-export function isUsingClerk(): boolean {
-  return isClerkConfigured();
 }
 
 // ─────────────────────────────────────────────────────────────

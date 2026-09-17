@@ -259,21 +259,3 @@ export async function getLibraryDocs(
     return null;
   }
 }
-
-/**
- * Convenience: resolve a free-text library name to a single best-match
- * Context7 library ID. Returns null if no match.
- *
- * Equivalent to the MCP `resolve-library-id` tool.
- */
-export async function resolveLibraryId(
-  libraryName: string
-): Promise<Context7Library | null> {
-  const { results } = await searchLibraries(libraryName, 5);
-  if (results.length === 0) return null;
-  // Return the highest-trust match (or the first if trust scores are
-  // missing — the API already sorts by relevance).
-  return results.reduce((best, cur) =>
-    (cur.trustScore ?? 0) > (best.trustScore ?? 0) ? cur : best
-  );
-}

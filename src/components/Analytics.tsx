@@ -1,5 +1,4 @@
 import Script from "next/script";
-import { SITE_URL } from "@/lib/site";
 
 /**
  * Analytics integration using Plausible (privacy-friendly, cookie-free).

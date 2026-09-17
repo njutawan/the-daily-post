@@ -369,45 +369,6 @@ export default async function Home() {
   );
 }
 
-function WorkspaceCard({
-  href,
-  icon: Icon,
-  accent,
-  label,
-  description,
-  cta,
-}: {
-  href: string;
-  icon: typeof ShieldCheck;
-  accent: string;
-  label: string;
-  description: string;
-  cta: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="group flex flex-col rounded-lg border border-stone-200 bg-white p-6 transition-all hover:border-stone-300 hover:shadow-md dark:border-stone-800 dark:bg-stone-900 dark:hover:border-stone-700"
-    >
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-stone-100 dark:bg-stone-800">
-          <Icon className={`h-5 w-5 ${accent}`} strokeWidth={2.2} />
-        </div>
-        <div className="font-headline text-lg font-bold text-stone-900 dark:text-stone-50">
-          {label}
-        </div>
-      </div>
-      <p className="mt-4 flex-1 font-body text-sm leading-relaxed text-stone-600 dark:text-stone-400">
-        {description}
-      </p>
-      <div className={`mt-5 flex items-center gap-1.5 font-sans text-xs font-bold uppercase tracking-[0.18em] ${accent}`}>
-        {cta}
-        <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-      </div>
-    </Link>
-  );
-}
-
 function SectionLabel({ label, icon }: { label: string; icon?: React.ReactNode }) {
   return (
     <div className="mb-3 flex items-center gap-1.5 font-sans text-[11px] font-bold uppercase tracking-[0.15em] text-red-700">

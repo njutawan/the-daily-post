@@ -9,7 +9,6 @@ import {
   CloudLightning,
   Wind,
   CloudFog,
-  Loader2,
 } from "lucide-react";
 
 /**

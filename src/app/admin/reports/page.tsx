@@ -238,7 +238,7 @@ export default async function AdminReportsPage() {
 
                     <div className="mt-4 flex flex-wrap gap-2 border-t border-stone-200 pt-3 dark:border-stone-800">
                       <DeleteReportButton reportId={r.reportId} />
-                      <DeleteCommentButton commentId={r.commentId} reportId={r.reportId} />
+                      <DeleteCommentButton commentId={r.commentId} />
                     </div>
                   </article>
                 ))}

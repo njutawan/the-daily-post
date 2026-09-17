@@ -53,11 +53,6 @@ export default async function AdminTyposPage() {
     error = "Failed to load typo reports.";
   }
 
-  const statusCounts = reports.reduce<Record<string, number>>((acc, r) => {
-    acc[r.status] = (acc[r.status] || 0) + 1;
-    return acc;
-  }, {});
-
   return (
     <div className="flex min-h-screen flex-col bg-white dark:bg-stone-950">
       <Header />
