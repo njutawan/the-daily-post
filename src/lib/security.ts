@@ -104,3 +104,40 @@ export function verifyOrigin(req: NextRequest, opts?: { skipWebhook?: boolean })
   // don't send Origin (some older browsers, curl without headers).
   return true;
 }
+
+/**
+ * Sanitize a URL for safe fetching (SSRF prevention).
+ */
+export function assertSafeUrl(urlStr: string, allowedHosts?: string[]): void {
+  let url: URL;
+  try {
+    url = new URL(urlStr);
+  } catch {
+    throw new Error("Invalid URL format");
+  }
+
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error(`Blocked protocol: ${url.protocol}`);
+  }
+
+  const host = url.hostname.toLowerCase();
+  const blockedHosts = [
+    "localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]",
+    "169.254.169.254", "metadata.google.internal",
+  ];
+
+  if (blockedHosts.includes(host)) {
+    throw new Error(`Blocked internal host: ${host}`);
+  }
+
+  if (
+    /^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)/.test(host) ||
+    /^fd[0-9a-f]{2}:/i.test(host)
+  ) {
+    throw new Error(`Blocked private IP range: ${host}`);
+  }
+
+  if (allowedHosts && !allowedHosts.includes(host)) {
+    throw new Error(`Host not in allowlist: ${host}`);
+  }
+}

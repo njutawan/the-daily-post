@@ -4,7 +4,8 @@ Ringkasan pembersihan dead code / unused code. Semua temuan diverifikasi dengan
 compiler TypeScript (`noUnusedLocals`), grep referensi silang, dan analisis
 graph import transitif — bukan tebakan.
 
-**Hasil: 63 file berubah, 12 baris ditambah, 5.129 baris dihapus, 36 file dihapus.**
+**Hasil (diff terhadap default branch `njutawan-add-critical-path-tests`):
+63 file berubah, 198 baris ditambah, 5.077 baris dihapus, 36 file dihapus.**
 
 ---
 
@@ -34,7 +35,7 @@ dihapus. Setelah pembersihan, hitungan TS6133 turun dari **16 → 0**.
 
 ---
 
-## 2. Export dengan nol referensi (12 fungsi/tipe)
+## 2. Export dengan nol referensi (9 fungsi/tipe)
 
 Export yang dideklarasikan tapi **tidak punya satu pun pemanggil** di seluruh repo
 (termasuk `content/`, `mini-services/`, dan file test).
@@ -42,18 +43,37 @@ Export yang dideklarasikan tapi **tidak punya satu pun pemanggil** di seluruh re
 | File | Export dihapus |
 |---|---|
 | `src/components/BookmarkButton.tsx` | `isBookmarked()` |
-| `src/lib/auth-unified.ts` | `requireUser()`, `isUsingClerk()` |
 | `src/lib/context7.ts` | `resolveLibraryId()` |
 | `src/lib/env.ts` | `type Env` |
 | `src/lib/mdx-articles.ts` | `getAllMDXArticles()` |
 | `src/lib/paywall.ts` | `useReadStatus()`, `isPaywalled()` |
-| `src/lib/security.ts` | `assertSafeUrl()` (SSRF helper, tidak pernah dipanggil) |
 | `src/lib/validation.ts` | `CommentInput`, `TypoInput`, `CommentActionInput`, `CommentEditInput`, `TTSInput`, `ReadingInput`, `SubscribeInput` + schema `commentActionSchema`, `commentEditSchema`, `readingSchema` yang hanya dipakai oleh type alias-nya sendiri |
 
 **Efek berantai yang ikut dibersihkan:** menghapus import `isPaywalled` di
 `PaywallGate.tsx` membuat fungsi `isPaywalled()` di `paywall.ts` jadi yatim —
 fungsi itu ikut dihapus pada lintasan kedua. Import `* as React` di `paywall.ts`
 juga ikut hilang karena satu-satunya pemakai (`useReadStatus`) sudah dibuang.
+
+### ⚠️ Tiga fungsi yang DIKEMBALIKAN setelah merge base branch
+
+Branch ini dimulai dari `31475a1`, tetapi default branch sudah 4 commit lebih
+maju dan menambahkan `src/lib/security.test.ts` + `src/lib/auth-unified.test.ts`
+yang **menguji** fungsi-fungsi yang sempat saya hapus sebagai dead code:
+
+| Fungsi | Sempat dihapus | Dikembalikan karena |
+|---|---|---|
+| `assertSafeUrl()` (`src/lib/security.ts`) | ya | 8 assertion di `security.test.ts` (blok SSRF, protokol, allowlist) |
+| `requireUser()` (`src/lib/auth-unified.ts`) | ya | di-assert `resolves.toBeNull()` di `auth-unified.test.ts` |
+| `isUsingClerk()` (`src/lib/auth-unified.ts`) | ya | di-assert `toBe(false)` di `auth-unified.test.ts` |
+
+Tanpa pengembalian ini, PR akan membuat **2 test gagal** (`security.test.ts`) dan
+1 file test gagal load. Setelah dikembalikan, `security.ts` **byte-identical**
+dengan versi aslinya, dan `auth-unified.ts` hanya berbeda pada satu baris:
+import `cookies` dari `next/headers` yang memang tidak pernah dipakai.
+
+**Pelajaran:** "tidak ada pemanggil" ≠ "dead code" kalau ada test di branch lain
+yang menutupi fungsi tersebut. Analisis dead code harus dijalankan terhadap
+merge-base dengan branch target, bukan terhadap branch point lokal.
 
 ---
 
@@ -144,11 +164,16 @@ tooltip}`, `cmdk`, `embla-carousel-react`, `input-otp`, `react-day-picker`,
 |---|---|---|
 | `npx tsc --noEmit` | 22 error | **22 error — byte-identical dengan baseline, 0 error baru** |
 | `tsc --noUnusedLocals` (TS6133 dkk.) | 16 | **0** |
-| `npx vitest run` | 13 pass / 2 file | **13 pass / 2 file** |
+| `npx vitest run` | 32 pass / 5 file | **32 pass / 5 file** (1 file gagal load — lihat bawah) |
 | `npx eslint .` | 19 error | **16 error** (3 hilang: `paywall.ts`, `ui/carousel.tsx`, `use-mobile.ts`; 0 baru) |
 | Import → package.json | — | **35/35 paket ter-resolve** |
 | Fresh `npm install` dari manifest baru | 758 paket | **651 paket, sukses** |
 | Dev server (12 rute) | — | **identik dengan baseline** |
+
+Test suite naik dari 13 → 32 test karena merge base branch membawa masuk
+`security.test.ts` (13), `auth-unified.test.ts` (2), dan
+`saved-articles/route.test.ts` (6). Sebelum tiga fungsi dikembalikan, merge itu
+menghasilkan **2 test gagal + 1 file gagal load**; sesudahnya semuanya hijau.
 
 22 error tsc yang tersisa **sudah ada sebelum perubahan** dan bukan akibat
 cleanup: mayoritas karena Prisma client gagal di-generate (engine binary
@@ -165,3 +190,11 @@ jadi `{}`, plus 2 bug tipe nyata (`Header.tsx:353` prop `onOpenSections`,
   Rute yang menyentuh kode yang saya ubah — `/article/[slug]`, `/search`, `/about`,
   `/category/[cat]`, `/subscribe`, `/newsletters`, `/live`, `/saved`, dan 404 —
   semuanya **200**.
+- **`src/lib/auth-unified.test.ts` gagal load** dengan
+  `@prisma/client did not initialize` — `prisma generate` butuh engine binary dari
+  `binaries.prisma.sh` yang tidak terjangkau (`--no-engine` pun tetap mencoba
+  mengunduh `schema-engine`). Sudah dijalankan di **worktree base branch murni**:
+  hasilnya identik (4 file pass / 32 test pass / 1 file gagal dengan error yang
+  sama), jadi kegagalan ini pre-existing dan environmental, bukan efek cleanup.
+  Dua test di file itu (`isUsingClerk`, `requireUser`) tetap perlu fungsinya ada —
+  karena itu keduanya dikembalikan.
