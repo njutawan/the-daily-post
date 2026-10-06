@@ -34,8 +34,8 @@ export async function GET(req: Request) {
   // Rate limit: 5 req/min per IP+user (heavy CSV export).
   const ip = getClientIp(req);
   const key = `ip:${ip}:user:${admin.id || "anon"}`;
-  const limited = rateLimitByKeyResponse(key, { max: 5, windowMs: 60_000 });
-  if (limited) return new NextResponse(limited.body, { status: 429, headers: limited.headers });
+  const limited = await rateLimitByKeyResponse(key, { max: 5, windowMs: 60_000 });
+  if (limited) return limited;
 
   try {
     const users = await db.user.findMany({

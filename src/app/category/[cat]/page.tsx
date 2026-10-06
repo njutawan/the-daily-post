@@ -5,12 +5,14 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ArticleCard } from "@/components/ArticleCard";
 import { AdUnit } from "@/components/AdUnit";
+import { categories, getPublicCategoryName, getPublicCategorySlug } from "@/data/categories";
 import {
-  getArticlesByCategory,
-  categories,
-  categoryCounts,
-} from "@/data/articles";
+  getPublicArticleCatalog,
+  getPublicCategoryCounts,
+} from "@/lib/public-articles";
 import { ArrowLeft, Rss } from "lucide-react";
+
+export const revalidate = 300;
 
 export function generateStaticParams() {
   return categories
@@ -24,8 +26,7 @@ export async function generateMetadata({
   params: Promise<{ cat: string }>;
 }): Promise<Metadata> {
   const { cat } = await params;
-  const categoryName =
-    categories.find((c) => c.toLowerCase() === cat.toLowerCase()) ?? cat;
+  const categoryName = getPublicCategoryName(cat);
   return {
     title: `${categoryName} — The Daily Post`,
     description: `The latest ${categoryName} coverage from The Daily Post newsroom.`,
@@ -38,12 +39,16 @@ export default async function CategoryPage({
   params: Promise<{ cat: string }>;
 }) {
   const { cat } = await params;
-  const categoryName = categories.find(
-    (c) => c.toLowerCase() === cat.toLowerCase()
-  );
-  if (!categoryName || categoryName === "Live") notFound();
+  const categoryName = getPublicCategoryName(cat);
+  if (!categories.includes(categoryName) || categoryName === "Live") notFound();
 
-  const articles = getArticlesByCategory(categoryName);
+  const [publicCatalog, categoryCounts] = await Promise.all([
+    getPublicArticleCatalog(),
+    getPublicCategoryCounts(),
+  ]);
+  const articles = publicCatalog.filter(
+    (article) => article.category.toLowerCase() === categoryName.toLowerCase()
+  );
   const [lead, ...rest] = articles;
 
   return (
@@ -80,11 +85,11 @@ export default async function CategoryPage({
                 .filter((c) => c !== "Live")
                 .map((c) => {
                   const count = categoryCounts.find((x) => x.name === c)?.count ?? 0;
-                  const active = c.toLowerCase() === cat.toLowerCase();
+                  const active = c.toLowerCase() === categoryName.toLowerCase();
                   return (
                     <Link
                       key={c}
-                      href={`/category/${c.toLowerCase()}`}
+                      href={`/category/${getPublicCategorySlug(c)}`}
                       className={
                         active
                           ? "rounded-full bg-black px-3 py-1 font-sans text-xs font-bold uppercase tracking-wider text-white dark:bg-white dark:text-black"
@@ -190,6 +195,8 @@ function categoryTagline(name: string): string {
       return "A planet in flux — and the race to understand it.";
     case "Sports":
       return "The games, the stakes, and the people who play them.";
+    case "Culture":
+      return "The books, film, music, and ideas shaping the moment.";
     default:
       return "Independent reporting you can trust.";
   }

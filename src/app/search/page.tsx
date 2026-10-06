@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ArticleCard } from "@/components/ArticleCard";
-import { searchArticles, allArticles } from "@/data/articles";
+import { getPublicArticleCatalog, searchPublicArticles } from "@/lib/public-articles";
 import { ArrowLeft, Search as SearchIcon, TrendingUp } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -19,8 +19,11 @@ export default async function SearchPage({
 }) {
   const { q } = await searchParams;
   const query = (q ?? "").trim();
-  const results = query ? searchArticles(query) : [];
-  const trending = allArticles.slice(0, 6);
+  const [results, publicCatalog] = await Promise.all([
+    query ? searchPublicArticles(query) : Promise.resolve([]),
+    getPublicArticleCatalog(),
+  ]);
+  const trending = publicCatalog.slice(0, 6);
 
   return (
     <div className="flex min-h-screen flex-col bg-white dark:bg-stone-950">

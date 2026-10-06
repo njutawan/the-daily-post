@@ -1,8 +1,8 @@
 "use client";
 
-import * as React from "react";
 import { useTheme } from "next-themes";
 import { Monitor, Sun, Moon } from "lucide-react";
+import { useHydrated } from "@/hooks/use-hydrated";
 
 /**
  * Shows the current theme mode (light / dark / system) in the footer.
@@ -10,13 +10,9 @@ import { Monitor, Sun, Moon } from "lucide-react";
  */
 export function ThemeIndicator() {
   const { theme, resolvedTheme } = useTheme();
-  const [mounted, setMounted] = React.useState(false);
+  const hydrated = useHydrated();
 
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
+  if (!hydrated) {
     return (
       <span className="inline-flex items-center gap-1 font-sans text-[11px] text-stone-500 dark:text-stone-400">
         <Monitor className="h-3 w-3" />

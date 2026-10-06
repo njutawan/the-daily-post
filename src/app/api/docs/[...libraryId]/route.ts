@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getLibraryDocs } from "@/lib/context7";
 import { getSessionUser } from "@/lib/auth-unified";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimitResponse } from "@/lib/rate-limit";
 
 type RouteContext = { params: Promise<{ libraryId: string[] }> };
 
@@ -28,10 +28,8 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const limit = rateLimit(req, { max: 20, windowMs: 60_000 });
-  if (!limit.ok) {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
-  }
+  const limit = await rateLimitResponse(req, { max: 20, windowMs: 60_000 });
+  if (limit) return limit;
 
   const { libraryId: segments } = await ctx.params;
   // Reconstruct the Context7 library ID from the path segments.

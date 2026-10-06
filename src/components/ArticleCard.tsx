@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Clock, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Article } from "@/data/articles";
+import { getPublicCategorySlug } from "@/data/categories";
 
 type ArticleCardProps = {
   article: Article;
@@ -58,7 +59,7 @@ export function ArticleCard({
           )}
         </div>
         <div className="mt-4 flex flex-col">
-          <Link href={`/article/${article.category.toLowerCase()}`}>
+          <Link href={`/category/${getPublicCategorySlug(article.category)}`}>
             <div className="mb-3 flex items-center gap-2">
               <Badge variant="outline" className="rounded-none border-black px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-black hover:bg-black hover:text-white">
                 {article.category}
@@ -103,7 +104,7 @@ export function ArticleCard({
             />
           </Link>
         )}
-        <Link href={`/article/${article.category.toLowerCase()}`}>
+        <Link href={`/category/${getPublicCategorySlug(article.category)}`}>
           <span className="text-[11px] font-bold uppercase tracking-wider text-red-700">
             Opinion
           </span>
@@ -180,7 +181,7 @@ export function ArticleCard({
           />
         </Link>
       )}
-      <Link href={`/article/${article.category.toLowerCase()}`}>
+      <Link href={`/category/${getPublicCategorySlug(article.category)}`}>
         <div className="mb-2 flex items-center gap-2">
           <Badge variant="outline" className="rounded-none border-stone-400 px-2 py-0 text-[10px] font-bold uppercase tracking-wider text-stone-700 hover:border-black hover:text-black">
             {article.category}

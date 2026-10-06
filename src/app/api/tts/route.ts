@@ -153,8 +153,8 @@ function concatWavs(buffers: Buffer[]): Buffer {
 
 export async function POST(req: NextRequest) {
   // Rate limit: 5 TTS requests per minute per IP (expensive operation)
-  const limited = rateLimitResponse(req, { max: 5, windowMs: 60_000 });
-  if (limited) return new NextResponse(limited.body, { status: 429, headers: limited.headers });
+  const limited = await rateLimitResponse(req, { max: 5, windowMs: 60_000 });
+  if (limited) return limited;
 
   let raw: unknown;
   try {

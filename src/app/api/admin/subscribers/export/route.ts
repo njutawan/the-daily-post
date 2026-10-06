@@ -19,8 +19,8 @@ export async function GET(req: NextRequest) {
   const user = await getSessionUser();
   const ip = getClientIp(req);
   const key = `ip:${ip}:user:${user?.id || "anon"}`;
-  const limited = rateLimitByKeyResponse(key, { max: 5, windowMs: 60_000 });
-  if (limited) return new NextResponse(limited.body, { status: 429, headers: limited.headers });
+  const limited = await rateLimitByKeyResponse(key, { max: 5, windowMs: 60_000 });
+  if (limited) return limited;
   // Admin role guard — reject non-admin users.
   if (!user || user.role !== "admin") {
     return NextResponse.json({ error: "Admin access required." }, { status: 403 });
@@ -29,16 +29,24 @@ export async function GET(req: NextRequest) {
   try {
     const subscribers = await db.subscriber.findMany({
       orderBy: { createdAt: "desc" },
-      select: { email: true, source: true, createdAt: true },
+      select: {
+        email: true,
+        source: true,
+        verified: true,
+        unsubscribedAt: true,
+        createdAt: true,
+      },
     });
 
-    const header = "email,source,subscribed_at\n";
+    const header = "email,source,status,signup_requested_at,unsubscribed_at\n";
     const rows = subscribers
       .map((s) =>
         [
           csvEscape(s.email),
           csvEscape(s.source),
+          csvEscape(s.unsubscribedAt ? "unsubscribed" : s.verified ? "active" : "pending"),
           csvEscape(s.createdAt.toISOString()),
+          csvEscape(s.unsubscribedAt?.toISOString() || ""),
         ].join(",")
       )
       .join("\n");

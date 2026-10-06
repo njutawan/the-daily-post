@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Menu, Search, X, ChevronDown, Globe, Bookmark as BookmarkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -10,7 +10,8 @@ import { SearchCommand } from "@/components/SearchCommand";
 import { WorkspaceMenu } from "@/components/WorkspaceMenu";
 import { WeatherWidget } from "@/components/WeatherWidget";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
-import { categories } from "@/data/articles";
+import { categories } from "@/data/categories";
+import { useHydrated } from "@/hooks/use-hydrated";
 
 const navItems = [
   {
@@ -50,6 +51,20 @@ const navItems = [
   },
 ];
 
+function subscribeToWindowScroll(onChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("scroll", onChange, { passive: true });
+  return () => window.removeEventListener("scroll", onChange);
+}
+
+function getScrolledSnapshot() {
+  return typeof window !== "undefined" && window.scrollY > 120;
+}
+
+function getScrolledServerSnapshot() {
+  return false;
+}
+
 function formatDate(d: Date) {
   return d.toLocaleDateString("en-US", {
     weekday: "long",
@@ -60,20 +75,20 @@ function formatDate(d: Date) {
 }
 
 export function Header() {
-  const [now, setNow] = useState<string>("");
+  const hydrated = useHydrated();
+  const now = useMemo(
+    () => (hydrated ? formatDate(new Date()) : ""),
+    [hydrated]
+  );
   const [open, setOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
+  const scrolled = useSyncExternalStore(
+    subscribeToWindowScroll,
+    getScrolledSnapshot,
+    getScrolledServerSnapshot
+  );
 
   useEffect(() => {
-    // Set client-only date after mount to avoid hydration mismatch.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setNow(formatDate(new Date()));
-
-    const onScroll = () => setScrolled(window.scrollY > 120);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -85,10 +100,7 @@ export function Header() {
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onScroll);
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   return (

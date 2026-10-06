@@ -4,50 +4,82 @@ import * as React from "react";
 import { Bookmark } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useHydrated } from "@/hooks/use-hydrated";
 
 const STORAGE_KEY = "tdp:bookmarks";
+const BOOKMARKS_CHANGED_EVENT = "tdp:bookmarks-changed";
+const EMPTY_BOOKMARKS: string[] = [];
+
+let cachedBookmarkRaw: string | null | undefined;
+let cachedBookmarks = EMPTY_BOOKMARKS;
 
 // ---------------------------------------------------------------------------
 // Local-storage layer (fallback for anonymous users + static articles)
 // ---------------------------------------------------------------------------
 
+function parseBookmarks(raw: string | null): string[] {
+  if (!raw) return EMPTY_BOOKMARKS;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === "string")
+      : EMPTY_BOOKMARKS;
+  } catch {
+    return EMPTY_BOOKMARKS;
+  }
+}
+
 function readBookmarks(): string[] {
-  if (typeof window === "undefined") return [];
+  return getBookmarksSnapshot();
+}
+
+function getBookmarksSnapshot(): string[] {
+  if (typeof window === "undefined") return EMPTY_BOOKMARKS;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
+    if (raw !== cachedBookmarkRaw) {
+      cachedBookmarkRaw = raw;
+      cachedBookmarks = parseBookmarks(raw);
+    }
   } catch {
-    return [];
+    return cachedBookmarks;
   }
+  return cachedBookmarks;
 }
 
 function writeBookmarks(slugs: string[]) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(slugs));
-    window.dispatchEvent(new CustomEvent("tdp:bookmarks-changed"));
+    const raw = JSON.stringify(slugs);
+    window.localStorage.setItem(STORAGE_KEY, raw);
+    cachedBookmarkRaw = raw;
+    cachedBookmarks = [...slugs];
+    window.dispatchEvent(new CustomEvent(BOOKMARKS_CHANGED_EVENT));
   } catch {
     /* ignore */
   }
 }
 
+function subscribeToBookmarks(onChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(BOOKMARKS_CHANGED_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(BOOKMARKS_CHANGED_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+function getBookmarksServerSnapshot(): string[] {
+  return EMPTY_BOOKMARKS;
+}
+
 export function useBookmarks() {
-  const [bookmarks, setBookmarks] = React.useState<string[]>([]);
-
-  React.useEffect(() => {
-    setBookmarks(readBookmarks());
-    const onChange = () => setBookmarks(readBookmarks());
-    window.addEventListener("tdp:bookmarks-changed", onChange);
-    window.addEventListener("storage", onChange);
-    return () => {
-      window.removeEventListener("tdp:bookmarks-changed", onChange);
-      window.removeEventListener("storage", onChange);
-    };
-  }, []);
-
-  return bookmarks;
+  return React.useSyncExternalStore(
+    subscribeToBookmarks,
+    getBookmarksSnapshot,
+    getBookmarksServerSnapshot
+  );
 }
 
 /**
@@ -138,48 +170,48 @@ type BookmarkButtonProps = {
 };
 
 export function BookmarkButton({ slug, className, variant = "icon" }: BookmarkButtonProps) {
-  const [saved, setSaved] = React.useState(false);
-  const [mounted, setMounted] = React.useState(false);
+  const bookmarks = useBookmarks();
+  const hydrated = useHydrated();
+  const [serverSavedSlug, setServerSavedSlug] = React.useState<string | null>(null);
+  const [optimistic, setOptimistic] = React.useState<{ slug: string; saved: boolean } | null>(null);
   const [busy, setBusy] = React.useState(false);
-  const [signedIn, setSignedIn] = React.useState<boolean | null>(null);
+  const localSaved = bookmarks.includes(slug);
+  const saved = optimistic?.slug === slug
+    ? optimistic.saved
+    : localSaved || serverSavedSlug === slug;
 
-  // On mount, check: (a) is the slug in localStorage? (b) is the user
-  // signed in? If signed in, also query the server for the true state.
+  // Check whether this slug is saved on the server for signed-in readers.
   React.useEffect(() => {
-    setMounted(true);
+    let cancelled = false;
     const localHas = readBookmarks().includes(slug);
-    setSaved(localHas);
 
     fetchIsSignedIn().then(async (signed) => {
-      setSignedIn(signed);
-      if (signed) {
-        // Ask the server whether this slug is already saved.
-        try {
-          const res = await fetch("/api/saved-articles", { cache: "no-store" });
-          if (res.ok) {
-            const data = await res.json();
-            const serverSlugs: string[] = (data.saved ?? [])
-              .map((s: { article?: { slug?: string }; articleId?: string }) =>
-                s.article?.slug ?? s.articleId
-              )
-              .filter((x: unknown): x is string => typeof x === "string");
-            if (serverSlugs.includes(slug)) {
-              setSaved(true);
-              // Also remove from localStorage so we don't double-track.
-              if (localHas) {
-                writeBookmarks(readBookmarks().filter((s) => s !== slug));
-              }
-            }
-          }
-        } catch {
-          // ignore — local state is the fallback
+      if (cancelled || !signed) return;
+
+      try {
+        const res = await fetch("/api/saved-articles", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        const serverSlugs: string[] = (data.saved ?? [])
+          .map((item: { article?: { slug?: string }; articleId?: string }) =>
+            item.article?.slug ?? item.articleId
+          )
+          .filter((value: unknown): value is string => typeof value === "string");
+        if (cancelled || !serverSlugs.includes(slug)) return;
+
+        setServerSavedSlug(slug);
+        // Avoid tracking the same saved article in both places.
+        if (localHas) {
+          writeBookmarks(readBookmarks().filter((savedSlug) => savedSlug !== slug));
         }
+      } catch {
+        // ignore — local state is the fallback
       }
     });
 
-    const onChange = () => setSaved(readBookmarks().includes(slug));
-    window.addEventListener("tdp:bookmarks-changed", onChange);
-    return () => window.removeEventListener("tdp:bookmarks-changed", onChange);
+    return () => {
+      cancelled = true;
+    };
   }, [slug]);
 
   async function handleClick(e: React.MouseEvent) {
@@ -190,26 +222,28 @@ export function BookmarkButton({ slug, className, variant = "icon" }: BookmarkBu
 
     const wasSaved = saved;
     const nowSaved = !wasSaved;
-    // Optimistic update.
-    setSaved(nowSaved);
+    setOptimistic({ slug, saved: nowSaved });
 
     // Try the server first (it handles the signed-in check + falls back
     // to localStorage when appropriate).
     const result = await toggleBookmarkServer(slug, nowSaved);
 
     if (result === null) {
-      // Server + local fallback both failed — revert.
-      setSaved(wasSaved);
+      // Server + local fallback both failed — the derived state still
+      // reflects the value from before the optimistic update.
       toast.error("Couldn't save the article. Please try again.");
-    } else if (result === "local" && signedIn === false) {
-      // Anonymous user — local-only save, no toast spam.
+    } else if (result === "local") {
+      // Local-only save (including the anonymous fallback), with no toast spam.
+      setServerSavedSlug((current) => (current === slug ? null : current));
     } else if (result === "server") {
+      setServerSavedSlug((current) => {
+        if (nowSaved) return slug;
+        return current === slug ? null : current;
+      });
       toast.success(nowSaved ? "Saved to your reading list" : "Removed from saved");
     }
 
-    // Re-sync local state (the server toggleBookmarkLocal call may have
-    // written to localStorage).
-    setSaved(readBookmarks().includes(slug) || (result === "server" && nowSaved));
+    setOptimistic(null);
     setBusy(false);
   }
 
@@ -247,7 +281,7 @@ export function BookmarkButton({ slug, className, variant = "icon" }: BookmarkBu
         className
       )}
     >
-      {mounted ? <Bookmark className={cn("h-4 w-4", saved && "fill-current")} /> : <Bookmark className="h-4 w-4 opacity-0" />}
+      {hydrated ? <Bookmark className={cn("h-4 w-4", saved && "fill-current")} /> : <Bookmark className="h-4 w-4 opacity-0" />}
     </button>
   );
 }

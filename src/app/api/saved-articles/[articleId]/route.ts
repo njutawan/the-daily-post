@@ -23,8 +23,8 @@ export async function DELETE(req: NextRequest, ctx: RouteContext) {
   // Rate limit: 30 req/min per IP+user (save/unsave).
   const ip = getClientIp(req);
   const key = `ip:${ip}:user:${user.id || "anon"}`;
-  const limited = rateLimitByKeyResponse(key, { max: 30, windowMs: 60_000 });
-  if (limited) return new NextResponse(limited.body, { status: 429, headers: limited.headers });
+  const limited = await rateLimitByKeyResponse(key, { max: 30, windowMs: 60_000 });
+  if (limited) return limited;
 
   try {
     // Resolve the param to a DB article id. If it doesn't look like a

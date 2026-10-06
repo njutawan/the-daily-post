@@ -98,7 +98,7 @@ export default async function AdminDashboardPage() {
     }),
     db.commentReport.count(),
     db.typoReport.count({ where: { status: "pending" } }),
-    db.subscriber.count(),
+    db.subscriber.count({ where: { verified: true, unsubscribedAt: null } }),
   ]);
 
   const stats: AdminDashboardStats = {

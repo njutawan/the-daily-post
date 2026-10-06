@@ -236,8 +236,8 @@ function mockWeather(loc: GeoLocation): WeatherResponse {
 
 export async function GET(req: Request) {
   // Rate limit: 30 req/min per IP (weather is cached 10 min, no need for frequent polling).
-  const limited = rateLimitResponse(req, { max: 30, windowMs: 60_000 });
-  if (limited) return new NextResponse(limited.body, { status: 429, headers: limited.headers });
+  const limited = await rateLimitResponse(req, { max: 30, windowMs: 60_000 });
+  if (limited) return limited;
 
   // 1. Resolve the visitor's location via IP geolocation.
   let loc: GeoLocation = getDefaultLocation();

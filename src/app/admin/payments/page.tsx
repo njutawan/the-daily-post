@@ -7,7 +7,7 @@ import type { AdminPaymentRow } from "@/components/admin/types";
 
 export const metadata: Metadata = {
   title: "Payments — The Daily Post Admin",
-  description: "Every payment captured by the mock provider. Filter and export to CSV.",
+  description: "Every Stripe payment recorded for a subscriber. Filter and export to CSV.",
   robots: { index: false, follow: false },
 };
 

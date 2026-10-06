@@ -16,7 +16,6 @@
  *   - allaccess  : digital + print + premium newsletters
  */
 
-import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 
 export type Role = "reader" | "editor" | "admin";
@@ -95,6 +94,8 @@ async function getSessionUserClerk(): Promise<SessionUser | null> {
     const email = user.primaryEmailAddress?.emailAddress ?? "";
     if (!email) return null;
 
+    const { db } = await import("@/lib/db");
+
     // Role is stored in Clerk publicMetadata.role (set by Clerk dashboard
     // or via the backend API). Default to "reader".
     const role = (user.publicMetadata.role as Role) || "reader";
@@ -119,11 +120,15 @@ async function getSessionUserClerk(): Promise<SessionUser | null> {
       },
     });
 
+    const normalizedRole: Role = dbUser.role === "admin" || dbUser.role === "editor"
+      ? dbUser.role
+      : "reader";
+
     return {
       id: dbUser.id,
       email: dbUser.email,
       name: dbUser.name,
-      role: dbUser.role as Role,
+      role: normalizedRole,
       subTier: dbUser.subTier as SubTier,
       subStatus: dbUser.subStatus,
       subExpiresAt: dbUser.subExpiresAt,

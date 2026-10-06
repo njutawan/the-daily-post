@@ -1,7 +1,7 @@
 import { unstable_cache } from "next/cache";
 import { db } from "@/lib/db";
-import { allArticles } from "@/data/articles";
 import type { Article } from "@/data/articles";
+import { getPublicArticleCatalog } from "@/lib/public-articles";
 
 export type PopularArticle = Article & {
   views: number;
@@ -20,6 +20,8 @@ export type PopularArticle = Article & {
  * every homepage render.
  */
 async function _getPopularThisWeek(limit: number): Promise<PopularArticle[]> {
+  const publicArticles = await getPublicArticleCatalog();
+  const articlesBySlug = new Map(publicArticles.map((article) => [article.slug, article]));
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
   try {
@@ -39,17 +41,18 @@ async function _getPopularThisWeek(limit: number): Promise<PopularArticle[]> {
       _sum: { upvotes: true },
     });
 
-    const commentMap = new Map(
-      commentRows.map((r) => [
-        r.articleSlug,
-        { count: r._count._all, upvotes: r._sum.upvotes || 0 },
-      ])
-    );
+    const commentMap = new Map<string, { count: number; upvotes: number }>();
+    for (const row of commentRows) {
+      commentMap.set(row.articleSlug, {
+        count: row._count._all,
+        upvotes: row._sum.upvotes || 0,
+      });
+    }
 
     // Build the ranked list
     const ranked: PopularArticle[] = [];
     for (const row of viewRows) {
-      const article = allArticles.find((a) => a.slug === row.articleSlug);
+      const article = articlesBySlug.get(row.articleSlug);
       if (!article) continue;
       const views = row._count._all;
       const c = commentMap.get(row.articleSlug) || { count: 0, upvotes: 0 };
@@ -67,7 +70,7 @@ async function _getPopularThisWeek(limit: number): Promise<PopularArticle[]> {
 
     // If we have fewer than `limit` with views, pad with articles that have comments
     if (ranked.length < limit) {
-      for (const article of allArticles) {
+      for (const article of publicArticles) {
         if (ranked.find((r) => r.slug === article.slug)) continue;
         const c = commentMap.get(article.slug) || { count: 0, upvotes: 0 };
         if (c.count > 0 || c.upvotes > 0) {
@@ -99,6 +102,7 @@ async function _getPopularThisWeek(limit: number): Promise<PopularArticle[]> {
  */
 export const getPopularThisWeek = unstable_cache(_getPopularThisWeek, ["popular"], {
   revalidate: 3600, // 1 hour
+  tags: ["popular"],
 });
 
 /**
@@ -108,6 +112,8 @@ export const getPopularThisWeek = unstable_cache(_getPopularThisWeek, ["popular"
  * Cached for 1 hour.
  */
 async function _getMostRead(limit: number): Promise<PopularArticle[]> {
+  const publicArticles = await getPublicArticleCatalog();
+  const articlesBySlug = new Map(publicArticles.map((article) => [article.slug, article]));
   try {
     const viewRows = await db.articleView.groupBy({
       by: ["articleSlug"],
@@ -122,16 +128,17 @@ async function _getMostRead(limit: number): Promise<PopularArticle[]> {
       _sum: { upvotes: true },
     });
 
-    const commentMap = new Map(
-      commentRows.map((r) => [
-        r.articleSlug,
-        { count: r._count._all, upvotes: r._sum.upvotes || 0 },
-      ])
-    );
+    const commentMap = new Map<string, { count: number; upvotes: number }>();
+    for (const row of commentRows) {
+      commentMap.set(row.articleSlug, {
+        count: row._count._all,
+        upvotes: row._sum.upvotes || 0,
+      });
+    }
 
     const ranked: PopularArticle[] = [];
     for (const row of viewRows) {
-      const article = allArticles.find((a) => a.slug === row.articleSlug);
+      const article = articlesBySlug.get(row.articleSlug);
       if (!article) continue;
       const views = row._count._all;
       const c = commentMap.get(row.articleSlug) || { count: 0, upvotes: 0 };
@@ -145,7 +152,7 @@ async function _getMostRead(limit: number): Promise<PopularArticle[]> {
 
     // Pad with comment-active articles if view data is sparse
     if (ranked.length < limit) {
-      for (const article of allArticles) {
+      for (const article of publicArticles) {
         if (ranked.find((r) => r.slug === article.slug)) continue;
         const c = commentMap.get(article.slug) || { count: 0, upvotes: 0 };
         if (c.count > 0 || c.upvotes > 0) {
@@ -170,6 +177,7 @@ async function _getMostRead(limit: number): Promise<PopularArticle[]> {
 
 export const getMostRead = unstable_cache(_getMostRead, ["most-read"], {
   revalidate: 3600, // 1 hour
+  tags: ["most-read"],
 });
 
 export type TrendingTopic = {
@@ -185,6 +193,7 @@ export type TrendingTopic = {
  * Tagged `trending` so we can manually revalidate from the views POST handler.
  */
 async function _getTrendingTopics(limit: number): Promise<TrendingTopic[]> {
+  const publicArticles = await getPublicArticleCatalog();
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   try {
     // Use groupBy instead of findMany — single round-trip + aggregates
@@ -197,7 +206,7 @@ async function _getTrendingTopics(limit: number): Promise<TrendingTopic[]> {
 
     // Map slugs to categories
     const slugToCategory = new Map(
-      allArticles.map((a) => [a.slug, a.category])
+      publicArticles.map((a) => [a.slug, a.category])
     );
 
     // Count views per category
@@ -215,7 +224,7 @@ async function _getTrendingTopics(limit: number): Promise<TrendingTopic[]> {
     // If no views yet, fall back to article counts per category
     if (catViews.size === 0) {
       const catCounts = new Map<string, number>();
-      for (const a of allArticles) {
+      for (const a of publicArticles) {
         catCounts.set(a.category, (catCounts.get(a.category) || 0) + 1);
       }
       return Array.from(catCounts.entries())
@@ -244,4 +253,5 @@ async function _getTrendingTopics(limit: number): Promise<TrendingTopic[]> {
 
 export const getTrendingTopics = unstable_cache(_getTrendingTopics, ["trending"], {
   revalidate: 3600, // 1 hour
+  tags: ["trending"],
 });

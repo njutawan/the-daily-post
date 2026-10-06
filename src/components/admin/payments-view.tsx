@@ -130,7 +130,7 @@ export function AdminPaymentsView({
       <DashboardPageHeader
         eyebrow="Revenue"
         title="Payment Records"
-        description="Every payment captured by the mock provider. Filter by status and tier, then export as needed."
+        description="Every Stripe payment recorded for a subscriber. Filter by status and tier, then export as needed."
       />
 
       {/* Summary cards */}

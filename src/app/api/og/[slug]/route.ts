@@ -4,18 +4,16 @@ import { generateOGImage } from "@/lib/og-image";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { rateLimitResponse } from "@/lib/rate-limit";
+import { getPublicCategoryName } from "@/data/categories";
 
 export const runtime = "nodejs";
 
 /**
  * GET /api/og/[slug] — generate an Open Graph image for an article.
  *
- * Looks up the article in two places:
- *  1. The static `data/articles.ts` catalog (built-in MDX articles).
- *  2. The database `Article` table (editorial workflow — articles published
- *     via the editor → admin review flow).
- *
- * For DB articles, we map the database shape to the OG Article shape.
+ * Prefers the database `Article` table (editorial workflow) and falls back
+ * to the built-in static catalog for MDX/catalog content. The DB query selects
+ * public metadata only, never the article body.
  * This is the "OG auto-detect" — the OG image is generated on demand
  * from whatever data the article actually has, no manual upload needed.
  */
@@ -54,12 +52,12 @@ function dbArticleToOGArticle(dbArticle: DbArticleLite): Article {
     slug: dbArticle.slug,
     title: dbArticle.title,
     deck: dbArticle.excerpt ?? "",
-    category: dbArticle.category,
+    category: getPublicCategoryName(dbArticle.category),
     author: dbArticle.authorByline ?? dbArticle.authorName ?? "Staff Reporter",
     time,
     publishedAt: publishedDate.toISOString(),
     readTime,
-    imageUrl: dbArticle.heroImage ?? "https://z-cdn.chatglm.cn/z-ai/static/news-default.jpg",
+    imageUrl: dbArticle.heroImage ?? "/images/capitol-1.jpg",
     imageCaption: dbArticle.heroCaption ?? undefined,
   };
 }
@@ -68,42 +66,47 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
-  // Rate limit: 60 req/min per IP (OG image gen is cached 24h).
-  const limited = rateLimitResponse(req, { max: 60, windowMs: 60_000 });
-  if (limited) return new NextResponse(limited.body, { status: 429, headers: limited.headers });
+  // Rate limit: 60 req/min per IP; generated images use a five-minute shared cache.
+  const limited = await rateLimitResponse(req, { max: 60, windowMs: 60_000 });
+  if (limited) return limited;
 
   const { slug } = await params;
 
-  // 1. Check the static catalog first (fast — no DB hit).
-  let article: Article | null = getArticleBySlug(slug) ?? null;
-
-  // 2. Fall back to the database (editorial workflow).
-  if (!article) {
-    try {
-      const dbArticle = await db.article.findUnique({
-        where: { slug },
-        include: {
-          author: { select: { name: true, byline: true } },
-        },
+  // Published editorial records take precedence over a static article with
+  // the same slug. Select only public metadata; never load the article body.
+  let article: Article | null = null;
+  try {
+    const dbArticle = await db.article.findFirst({
+      where: { slug, status: "published" },
+      select: {
+        slug: true,
+        title: true,
+        excerpt: true,
+        category: true,
+        publishedAt: true,
+        heroImage: true,
+        heroCaption: true,
+        author: { select: { name: true, byline: true } },
+      },
+    });
+    if (dbArticle) {
+      article = dbArticleToOGArticle({
+        slug: dbArticle.slug,
+        title: dbArticle.title,
+        excerpt: dbArticle.excerpt,
+        category: dbArticle.category,
+        publishedAt: dbArticle.publishedAt,
+        heroImage: dbArticle.heroImage,
+        heroCaption: dbArticle.heroCaption,
+        authorName: dbArticle.author.name,
+        authorByline: dbArticle.author.byline,
       });
-      if (dbArticle && dbArticle.status === "published") {
-        article = dbArticleToOGArticle({
-          slug: dbArticle.slug,
-          title: dbArticle.title,
-          excerpt: dbArticle.excerpt,
-          category: dbArticle.category,
-          publishedAt: dbArticle.publishedAt,
-          heroImage: dbArticle.heroImage,
-          heroCaption: dbArticle.heroCaption,
-          authorName: dbArticle.author.name,
-          authorByline: dbArticle.author.byline,
-        });
-      }
-    } catch (err) {
-      logger.error({ err, slug }, "[/api/og] DB lookup failed");
-      // Don't 500 — we just didn't find a DB article.
     }
+  } catch (err) {
+    logger.error({ err, slug }, "[/api/og] DB lookup failed");
+    // Fall back to built-in content if the editorial DB is unavailable.
   }
+  if (!article) article = getArticleBySlug(slug) ?? null;
 
   if (!article) {
     return NextResponse.json(
@@ -117,7 +120,7 @@ export async function GET(
     return new NextResponse(new Uint8Array(png), {
       headers: {
         "Content-Type": "image/png",
-        "Cache-Control": "public, max-age=86400, s-maxage=86400",
+        "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
       },
     });
   } catch (err) {

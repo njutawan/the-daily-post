@@ -24,8 +24,8 @@ export async function POST(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   // Rate limit: 60 req/min per IP (view tracking).
-  const limited = rateLimitResponse(req, { max: 60, windowMs: 60_000 });
-  if (limited) return new NextResponse(limited.body, { status: 429, headers: limited.headers });
+  const limited = await rateLimitResponse(req, { max: 60, windowMs: 60_000 });
+  if (limited) return limited;
 
   const { slug } = await params;
   if (!getArticleBySlug(slug)) {
@@ -72,8 +72,8 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   // Rate limit: 60 req/min per IP (view tracking).
-  const limited = rateLimitResponse(req, { max: 60, windowMs: 60_000 });
-  if (limited) return new NextResponse(limited.body, { status: 429, headers: limited.headers });
+  const limited = await rateLimitResponse(req, { max: 60, windowMs: 60_000 });
+  if (limited) return limited;
 
   const { slug } = await params;
   if (!getArticleBySlug(slug)) {

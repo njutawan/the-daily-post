@@ -17,8 +17,8 @@ export async function GET(req: NextRequest) {
   // Rate limit: 20 req/min per IP+user (admin user management).
   const ip = getClientIp(req);
   const key = `ip:${ip}:user:${user.id || "anon"}`;
-  const limited = rateLimitByKeyResponse(key, { max: 20, windowMs: 60_000 });
-  if (limited) return new NextResponse(limited.body, { status: 429, headers: limited.headers });
+  const limited = await rateLimitByKeyResponse(key, { max: 20, windowMs: 60_000 });
+  if (limited) return limited;
 
   const url = req.nextUrl;
   const role = url.searchParams.get("role") || undefined;

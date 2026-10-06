@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireRole, type Role } from "@/lib/auth-unified";
 import { logger } from "@/lib/logger";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimitResponse } from "@/lib/rate-limit";
 
 type RouteContext = { params: Promise<{ commentId: string }> };
 
@@ -21,10 +21,8 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ error: "Admin only" }, { status: 403 });
   }
 
-  const limit = rateLimit(req, { max: 60, windowMs: 60_000 });
-  if (!limit.ok) {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
-  }
+  const limit = await rateLimitResponse(req, { max: 60, windowMs: 60_000 });
+  if (limit) return limit;
 
   try {
     // Verify the comment exists — return 404 (not a generic 500) if not.

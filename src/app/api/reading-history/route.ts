@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth-unified";
 import { logger } from "@/lib/logger";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimitResponse } from "@/lib/rate-limit";
 
 const UpsertHistorySchema = z.object({
   articleId: z.string().min(1),
@@ -62,10 +62,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Rate limit: 60 reads/sec per IP (reading progress is high-frequency).
-  const limit = rateLimit(req, { max: 60, windowMs: 60_000 });
-  if (!limit.ok) {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
-  }
+  const limit = await rateLimitResponse(req, { max: 60, windowMs: 60_000 });
+  if (limit) return limit;
 
   const body = await req.json().catch(() => null);
   const parsed = UpsertHistorySchema.safeParse(body);

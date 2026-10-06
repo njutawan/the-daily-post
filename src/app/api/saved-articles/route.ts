@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth-unified";
 import { logger } from "@/lib/logger";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimitResponse } from "@/lib/rate-limit";
 
 /**
  * GET /api/saved-articles — list of articles saved by the current user.
@@ -55,10 +55,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const limit = rateLimit(req, { max: 30, windowMs: 60_000 });
-  if (!limit.ok) {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
-  }
+  const limit = await rateLimitResponse(req, { max: 30, windowMs: 60_000 });
+  if (limit) return limit;
 
   const body = await req.json().catch(() => ({}));
   // Accept either articleId (DB id) or slug (URL slug). The

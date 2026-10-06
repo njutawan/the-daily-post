@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ArticleCard } from "@/components/ArticleCard";
@@ -19,10 +20,20 @@ import { AdUnit } from "@/components/AdUnit";
 import { TableOfContents } from "@/components/TableOfContents";
 import { PaywallGate } from "@/components/PaywallGate";
 import { StickySubscribeCTA } from "@/components/StickySubscribeCTA";
+import { getSessionUser } from "@/lib/auth-unified";
+import { getArticleAccess } from "@/lib/paywall";
+import { logger } from "@/lib/logger";
 import { PullQuote } from "@/components/mdx/PullQuote";
 import { Embed } from "@/components/mdx/Embed";
-import { allArticles, getArticleBySlug, trendingStories } from "@/data/articles";
-import { getMDXArticle, getArticleSlugs, extractHeadings } from "@/lib/mdx-articles";
+import { getArticleBySlug, trendingStories } from "@/data/articles";
+import { getMDXArticle, extractHeadings } from "@/lib/mdx-articles";
+import {
+  getPublishedEditorialArticleBodyBySlug,
+  getPublishedEditorialArticleBySlug,
+  getPublishedEditorialArticles,
+} from "@/lib/public-articles";
+import { getPublicCategoryName, getPublicCategorySlug } from "@/data/categories";
+import { markdownToPlainText, renderMarkdown } from "@/lib/render-markdown";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import {
   Clock,
@@ -30,19 +41,10 @@ import {
   ChevronRight,
 } from "lucide-react";
 
-export function generateStaticParams() {
-  const dataSlugs = allArticles.map((a) => ({ slug: a.slug }));
-  const mdxSlugs = getArticleSlugs().map((s) => ({ slug: s }));
-  // Deduplicate: prefer MDX if same slug exists in both
-  const all = [...mdxSlugs, ...dataSlugs.filter((d) => !mdxSlugs.some((m) => m.slug === d.slug))];
-  return all;
-}
-
-// ISR: statically generate at build time, then revalidate in the background
-// every 5 minutes. Article pages are read-heavy and change rarely — ISR
-// gives sub-50ms response times while still picking up view-count + comment
-// updates without a full rebuild.
-export const revalidate = 300; // 5 minutes
+// Article responses are personalized by entitlement and monthly meter state.
+// Force request-time rendering so Next.js never shares one reader's gated or
+// entitled HTML/RSC payload with another visitor.
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
@@ -50,14 +52,27 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const mdxArticle = getMDXArticle(slug);
+  const [publishedEditorialArticle, mdxArticle] = await Promise.all([
+    getPublishedEditorialArticleBySlug(slug),
+    Promise.resolve(getMDXArticle(slug)),
+  ]);
   const dataArticle = getArticleBySlug(slug);
-  if (!mdxArticle && !dataArticle) return { title: "Article Not Found — The Daily Post" };
-  const title = mdxArticle?.title || dataArticle!.title;
-  const deck = mdxArticle?.deck || dataArticle!.deck;
-  const category = mdxArticle?.category || dataArticle!.category;
-  const author = mdxArticle?.author || dataArticle!.author;
-  const publishedAt = mdxArticle?.publishedAt || dataArticle!.publishedAt;
+  if (!publishedEditorialArticle && !mdxArticle && !dataArticle) {
+    return { title: "Article Not Found — The Daily Post" };
+  }
+  const title = publishedEditorialArticle?.title || mdxArticle?.title || dataArticle!.title;
+  const deck = publishedEditorialArticle
+    ? publishedEditorialArticle.excerpt ?? ""
+    : mdxArticle?.deck || dataArticle!.deck;
+  const category = publishedEditorialArticle
+    ? getPublicCategoryName(publishedEditorialArticle.category)
+    : mdxArticle?.category || dataArticle!.category;
+  const author = publishedEditorialArticle
+    ? publishedEditorialArticle.author.byline || publishedEditorialArticle.author.name || "The Daily Post Staff"
+    : mdxArticle?.author || dataArticle!.author;
+  const publishedAt = publishedEditorialArticle
+    ? (publishedEditorialArticle.publishedAt ?? publishedEditorialArticle.updatedAt).toISOString()
+    : mdxArticle?.publishedAt || dataArticle!.publishedAt;
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.thedailypost.example";
   const ogImage = `/api/og/${slug}`;
   const absoluteOgImage = `${siteUrl}${ogImage}`;
@@ -149,34 +164,96 @@ export default async function ArticlePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-
-  // Try MDX content first, fall back to data.ts
-  const mdxArticle = getMDXArticle(slug);
+  const [publishedEditorialArticle, mdxArticle, editorialArticles] = await Promise.all([
+    getPublishedEditorialArticleBySlug(slug),
+    Promise.resolve(getMDXArticle(slug)),
+    getPublishedEditorialArticles(),
+  ]);
   const dataArticle = getArticleBySlug(slug);
 
-  if (!mdxArticle && !dataArticle) notFound();
+  if (!publishedEditorialArticle && !mdxArticle && !dataArticle) notFound();
 
-  // Use MDX article if available, otherwise fall back to data.ts
-  const isMDX = !!mdxArticle;
-  const title = mdxArticle?.title || dataArticle!.title;
-  const deck = mdxArticle?.deck || dataArticle!.deck;
-  const category = mdxArticle?.category || dataArticle!.category;
-  const author = mdxArticle?.author || dataArticle!.author;
-  const authorTitle = mdxArticle?.authorTitle || dataArticle!.authorTitle;
-  const publishedAt = mdxArticle?.publishedAt || dataArticle!.publishedAt;
-  const readTime = mdxArticle?.readTime || dataArticle!.readTime;
-  const imageUrl = mdxArticle?.imageUrl || dataArticle!.imageUrl;
-  const imageCaption = mdxArticle?.imageCaption || dataArticle!.imageCaption;
-  const imageCredit = mdxArticle?.imageCredit || dataArticle!.imageCredit;
-  const isPremium = Boolean(mdxArticle?.premium || dataArticle?.premium);
+  // A published database record is authoritative; MDX/static content remains
+  // the fallback for the built-in newsroom catalog.
+  const isDatabaseArticle = publishedEditorialArticle !== null;
+  const isMDX = !isDatabaseArticle && mdxArticle !== null;
+  const title = publishedEditorialArticle?.title || mdxArticle?.title || dataArticle!.title;
+  const deck = publishedEditorialArticle
+    ? publishedEditorialArticle.excerpt ?? ""
+    : mdxArticle?.deck || dataArticle!.deck;
+  const category = publishedEditorialArticle
+    ? getPublicCategoryName(publishedEditorialArticle.category)
+    : mdxArticle?.category || dataArticle!.category;
+  const author = publishedEditorialArticle
+    ? publishedEditorialArticle.author.byline || publishedEditorialArticle.author.name || "The Daily Post Staff"
+    : mdxArticle?.author || dataArticle!.author;
+  const authorTitle = publishedEditorialArticle
+    ? publishedEditorialArticle.author.role === "admin" ? "Editor-in-Chief" : undefined
+    : mdxArticle?.authorTitle || dataArticle!.authorTitle;
+  const publishedAt = publishedEditorialArticle
+    ? (publishedEditorialArticle.publishedAt ?? publishedEditorialArticle.updatedAt).toISOString()
+    : mdxArticle?.publishedAt || dataArticle!.publishedAt;
+  const imageUrl = publishedEditorialArticle
+    ? publishedEditorialArticle.heroImage || "/images/capitol-1.jpg"
+    : mdxArticle?.imageUrl || dataArticle!.imageUrl;
+  const imageCaption = publishedEditorialArticle
+    ? publishedEditorialArticle.heroCaption ?? undefined
+    : mdxArticle?.imageCaption || dataArticle!.imageCaption;
+  const imageCredit = publishedEditorialArticle
+    ? undefined
+    : mdxArticle?.imageCredit || dataArticle!.imageCredit;
+  let isPremium = publishedEditorialArticle
+    ? publishedEditorialArticle.premium
+    : Boolean(mdxArticle?.premium || dataArticle?.premium);
   const articleSlug = slug;
+  const sessionUser = await getSessionUser();
+  const requestHeaders = await headers();
+  let articleAccess = await getArticleAccess({
+    slug: articleSlug,
+    isPremium,
+    sessionUser,
+    requestHeaders,
+  });
+  let canReadFullText = articleAccess.allowed;
+  let publishedEditorialArticleBody: string | null = null;
 
-  // Extract headings for TOC (from MDX content or from data.ts body)
-  const headings = isMDX
-    ? extractHeadings(mdxArticle!.content)
-    : [];
+  // Premium body data is fetched only after the server-side entitlement check
+  // allows access. The uncached body query includes its current premium flag;
+  // if publication changed during this request, access is checked again.
+  if (isDatabaseArticle && canReadFullText) {
+    const bodyRecord = await getPublishedEditorialArticleBodyBySlug(slug);
+    if (bodyRecord) {
+      if (bodyRecord.premium !== isPremium) {
+        isPremium = bodyRecord.premium;
+        articleAccess = await getArticleAccess({
+          slug: articleSlug,
+          isPremium,
+          sessionUser,
+          requestHeaders,
+        });
+        canReadFullText = articleAccess.allowed;
+      }
+      if (canReadFullText) publishedEditorialArticleBody = bodyRecord.body;
+    }
+  }
+  const readTime = isDatabaseArticle
+    ? publishedEditorialArticleBody !== null
+      ? Math.max(1, Math.ceil(publishedEditorialArticleBody.trim().split(/\s+/).filter(Boolean).length / 200))
+      : 4
+    : mdxArticle?.readTime || dataArticle!.readTime;
 
-  const related = trendingStories.filter((a) => a.slug !== slug).slice(0, 4);
+  // Extract headings only from content the server has authorized for this request.
+  const headings = isDatabaseArticle && publishedEditorialArticleBody !== null
+    ? extractHeadings(publishedEditorialArticleBody)
+    : isMDX
+      ? extractHeadings(mdxArticle!.content)
+      : [];
+
+  const related = [...editorialArticles, ...trendingStories]
+    .filter((article, index, list) =>
+      article.slug !== slug && list.findIndex((candidate) => candidate.slug === article.slug) === index
+    )
+    .slice(0, 4);
   const publishedDate = new Date(publishedAt);
   // Use UTC explicitly to avoid server/client timezone hydration mismatches.
   const formattedDate = publishedDate.toLocaleDateString("en-US", {
@@ -197,8 +274,11 @@ export default async function ArticlePage({
   // Full untruncated body text — used for NER. We don't want to limit
   // entity detection to just the first 5k chars of `articleBody` (we'd
   // miss people mentioned at the end of long articles).
-  const articleBodySource: string =
-    isMDX && mdxArticle?.content
+  const articleBodySource: string = isDatabaseArticle
+    ? publishedEditorialArticleBody !== null
+      ? markdownToPlainText(publishedEditorialArticleBody)
+      : ""
+    : isMDX && mdxArticle?.content
       ? mdxArticle.content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
       : dataArticle?.body
         ? dataArticle.body.join("\n\n")
@@ -247,25 +327,37 @@ export default async function ArticlePage({
     copyrightYear: new Date(publishedAt).getFullYear(),
     copyrightHolder: { "@type": "Organization", name: "The Daily Post" },
     // wordCount helps AI engines judge article depth before citing.
-    wordCount: mdxArticle?.content
-      ? mdxArticle.content.split(/\s+/).filter(Boolean).length
-      : dataArticle?.body
-        ? dataArticle.body.join(" ").split(/\s+/).filter(Boolean).length
-        : readTime * 250,
-    // articleBody: full text for AI crawlers (only for non-premium articles
-    // — premium articles are gated by the paywall and not exposed).
+    wordCount: canReadFullText
+      ? isDatabaseArticle
+        ? publishedEditorialArticleBody !== null
+          ? markdownToPlainText(publishedEditorialArticleBody).split(/\s+/).filter(Boolean).length
+          : undefined
+        : isMDX && mdxArticle
+          ? mdxArticle.content.split(/\s+/).filter(Boolean).length
+          : dataArticle?.body
+            ? dataArticle.body.join(" ").split(/\s+/).filter(Boolean).length
+            : readTime * 250
+      : undefined,
+    // Never serialize gated article text into JSON-LD. A paywalled body must
+    // not appear in the HTML or React Server Component payload either.
     articleBody:
-      !isPremium && isMDX && mdxArticle?.content
-        ? mdxArticle.content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 5000)
-        : !isPremium && dataArticle?.body
-          ? dataArticle.body.join("\n\n").slice(0, 5000)
-          : undefined,
+      canReadFullText && !isPremium
+        ? isDatabaseArticle
+          ? publishedEditorialArticleBody !== null
+            ? markdownToPlainText(publishedEditorialArticleBody).slice(0, 5000)
+            : undefined
+          : isMDX && mdxArticle?.content
+            ? mdxArticle.content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 5000)
+            : dataArticle?.body
+              ? dataArticle.body.join("\n\n").slice(0, 5000)
+              : undefined
+        : undefined,
     // isPartOf links the article to its section (category) — helps AI
     // engines understand the topical context.
     isPartOf: {
       "@type": "CollectionPage",
       name: category,
-      url: `${siteUrl}/category/${category.toLowerCase()}`,
+      url: `${siteUrl}/category/${getPublicCategorySlug(category)}`,
     },
     // about: structured entities mentioned in the article. Uses lightweight
     // regex-based NER (src/lib/ner.ts) to detect People, Organizations, and
@@ -275,7 +367,7 @@ export default async function ArticlePage({
     about: [
       { "@type": "Thing", name: category },
       { "@type": "Organization", name: "The Daily Post" },
-      ...detectEntities(articleBodySource, 8),
+      ...(canReadFullText ? detectEntities(articleBodySource, 8) : []),
     ].slice(0, 12),
     // alternativeHeadline = deck (subtitle) — used by some AI engines
     // as a shorter title variant for citation.
@@ -298,7 +390,7 @@ export default async function ArticlePage({
         "@type": "ListItem",
         position: 2,
         name: category,
-        item: `${siteUrl}/category/${category.toLowerCase()}`,
+        item: `${siteUrl}/category/${getPublicCategorySlug(category)}`,
       },
       {
         "@type": "ListItem",
@@ -309,8 +401,15 @@ export default async function ArticlePage({
     ],
   };
 
-  const paragraphs =
-    !isMDX && dataArticle?.body && dataArticle.body.length > 0
+  const paragraphs = isDatabaseArticle
+    ? publishedEditorialArticleBody !== null
+      ? publishedEditorialArticleBody
+          .split(/\n{2,}/)
+          .filter((paragraph) => !/^\s*#\s/.test(paragraph))
+          .map(markdownToPlainText)
+          .filter(Boolean)
+      : []
+    : !isMDX && dataArticle?.body && dataArticle.body.length > 0
       ? dataArticle.body
       : !isMDX
         ? [
@@ -343,7 +442,7 @@ export default async function ArticlePage({
                 Home
               </Link>
               <ChevronRight className="h-3 w-3" />
-              <Link href={`#${category.toLowerCase()}`} className="hover:text-black">
+              <Link href={`/category/${getPublicCategorySlug(category)}`} className="hover:text-black">
                 {category}
               </Link>
               <ChevronRight className="h-3 w-3" />
@@ -356,7 +455,7 @@ export default async function ArticlePage({
 
         <article className="mx-auto max-w-3xl px-4 py-8">
           {/* Category */}
-          <Link href={`#${category.toLowerCase()}`}>
+          <Link href={`/category/${getPublicCategorySlug(category)}`}>
             <span className="inline-block border-b-2 border-red-700 pb-0.5 font-sans text-[11px] font-bold uppercase tracking-[0.15em] text-red-700">
               {category}
             </span>
@@ -420,7 +519,7 @@ export default async function ArticlePage({
           </div>
 
           {/* Listen to article (TTS) */}
-          {paragraphs[0] && (
+          {canReadFullText && paragraphs[0] && (
             <div className="mt-4">
               <ListenToArticle text={paragraphs[0]} />
             </div>
@@ -454,41 +553,58 @@ export default async function ArticlePage({
             )}
           </figure>
 
-          {/* Body — wrapped in PaywallGate for metering/premium gating */}
-          <PaywallGate slug={articleSlug} isPremium={isPremium}>
-          {/* Body */}
-          <div className="reading-column dropcap mt-8 font-body text-lg leading-[1.8] text-stone-800 sm:text-xl">
-            {isMDX && mdxArticle ? (
-              <MDXRemote
-                source={mdxArticle.content}
-                components={{ PullQuote, Embed }}
-              />
-            ) : (
-              <>
-                {paragraphs.map((p, i) => (
-                  <p key={i}>{p}</p>
-                ))}
+          {/* The body is selected server-side. Do not wrap restricted content in
+              a client-side blur: it must not be emitted in HTML or the RSC payload. */}
+          {canReadFullText ? (
+            <div className="reading-column dropcap mt-8 font-body text-lg leading-[1.8] text-stone-800 sm:text-xl">
+              {isDatabaseArticle ? (
+                publishedEditorialArticleBody !== null ? (
+                  <div
+                    dangerouslySetInnerHTML={{
+                      __html: renderMarkdown(publishedEditorialArticleBody),
+                    }}
+                  />
+                ) : (
+                  <p>Article content is temporarily unavailable. Please try again shortly.</p>
+                )
+              ) : isMDX && mdxArticle ? (
+                <MDXRemote
+                  source={mdxArticle.content}
+                  components={{ PullQuote, Embed }}
+                />
+              ) : (
+                <>
+                  {paragraphs.map((p, i) => (
+                    <p key={i}>{p}</p>
+                  ))}
 
-                {/* Pull quote */}
-                <blockquote className="my-8 border-y-2 border-black py-6 text-center">
-                  <p className="font-headline text-2xl font-bold italic leading-snug text-black sm:text-3xl">
-                    “This is what governing looks like when we put the country ahead of the next news cycle.”
+                  {/* Pull quote */}
+                  <blockquote className="my-8 border-y-2 border-black py-6 text-center">
+                    <p className="font-headline text-2xl font-bold italic leading-snug text-black sm:text-3xl">
+                      “This is what governing looks like when we put the country ahead of the next news cycle.”
+                    </p>
+                    <footer className="mt-3 font-sans text-xs font-bold uppercase tracking-wider text-stone-500">
+                      — Majority Leader Sarah Hinton (D-Mich.)
+                    </footer>
+                  </blockquote>
+
+                  <p>
+                    Reporting was contributed by correspondents in Washington, Brussels, and the Eastern theater. This is a developing story and will be updated.
                   </p>
-                  <footer className="mt-3 font-sans text-xs font-bold uppercase tracking-wider text-stone-500">
-                    — Majority Leader Sarah Hinton (D-Mich.)
-                  </footer>
-                </blockquote>
-
-                <p>
-                  Reporting was contributed by correspondents in Washington, Brussels, and the Eastern theater. This is a developing story and will be updated.
-                </p>
-              </>
-            )}
-          </div>
-          </PaywallGate>
+                </>
+              )}
+            </div>
+          ) : (
+            <PaywallGate
+              isPremium={isPremium}
+              isSignedIn={Boolean(sessionUser)}
+              readCount={articleAccess.readCount}
+              limit={articleAccess.limit}
+            />
+          )}
 
           {/* Table of Contents (only for MDX articles with headings) */}
-          {headings.length > 0 && (
+          {canReadFullText && headings.length > 0 && (
             <div className="my-8 border-t border-stone-200 pt-6 dark:border-stone-800">
               <TableOfContents headings={headings} />
             </div>

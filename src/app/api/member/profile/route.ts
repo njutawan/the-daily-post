@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth-unified";
 import { logger } from "@/lib/logger";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimitResponse } from "@/lib/rate-limit";
 
 const UpdateProfileSchema = z.object({
   name: z.string().min(1, "Name is required").max(100).optional(),
@@ -27,10 +27,8 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const limit = rateLimit(req, { max: 20, windowMs: 60_000 });
-  if (!limit.ok) {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
-  }
+  const limit = await rateLimitResponse(req, { max: 20, windowMs: 60_000 });
+  if (limit) return limit;
 
   const body = await req.json().catch(() => null);
   const parsed = UpdateProfileSchema.safeParse(body);

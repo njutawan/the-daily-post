@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useHydrated } from "@/hooks/use-hydrated";
 
 type Comment = {
   id: string;
@@ -55,7 +56,8 @@ function TimeAgo({ iso, mounted }: { iso: string; mounted: boolean }) {
 export function Comments({ slug }: CommentsProps) {
   const [comments, setComments] = React.useState<Comment[]>([]);
   const [total, setTotal] = React.useState(0);
-  const [loading, setLoading] = React.useState(true);
+  const [loadedSlug, setLoadedSlug] = React.useState<string | null>(null);
+  const loading = loadedSlug !== slug;
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [author, setAuthor] = React.useState("");
   const [body, setBody] = React.useState("");
@@ -63,18 +65,13 @@ export function Comments({ slug }: CommentsProps) {
   const [replyTo, setReplyTo] = React.useState<string | null>(null);
   const [sortBy, setSortBy] = React.useState<"newest" | "top">("newest");
   const [searchQuery, setSearchQuery] = React.useState("");
-  const [mounted, setMounted] = React.useState(false);
+  const mounted = useHydrated();
   const PAGE_SIZE = 5;
   const { toast } = useToast();
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Fetch the first page from the server
   React.useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     fetch(`/api/comments/${slug}?limit=${PAGE_SIZE}&offset=0`)
       .then((r) => r.json())
       .then((data) => {
@@ -85,7 +82,7 @@ export function Comments({ slug }: CommentsProps) {
       })
       .catch(() => {})
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setLoadedSlug(slug);
       });
     return () => {
       cancelled = true;
@@ -522,13 +519,10 @@ function CommentActions({
   const [editOpen, setEditOpen] = React.useState(false);
   const [editText, setEditText] = React.useState(body);
   const [editing, setEditing] = React.useState(false);
-  const [canEdit, setCanEdit] = React.useState(false);
+  const hydrated = useHydrated();
+  const canEdit =
+    hydrated && Date.now() - new Date(createdAt).getTime() < 5 * 60 * 1000;
   const { toast } = useToast();
-
-  // Show the Edit button only within the 5-minute window (client-only to avoid hydration mismatch)
-  React.useEffect(() => {
-    setCanEdit(Date.now() - new Date(createdAt).getTime() < 5 * 60 * 1000);
-  }, [createdAt]);
 
   async function handleEdit(e: React.FormEvent) {
     e.preventDefault();

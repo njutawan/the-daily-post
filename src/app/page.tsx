@@ -17,11 +17,15 @@ import {
   worldStories,
   moreNews,
 } from "@/data/articles";
-import { ArrowRight, ChevronRight, Flame, TrendingUp, Mail } from "lucide-react";
+import { ArrowRight, Flame, Mail } from "lucide-react";
+import { getPublishedEditorialArticles } from "@/lib/public-articles";
+
+export const revalidate = 300;
 
 export default async function Home() {
   // Run one-time startup tasks (data retention, cache cleanup)
   runStartupTasks();
+  const publishedEditorialArticles = await getPublishedEditorialArticles();
 
   return (
     <div className="flex min-h-screen flex-col bg-white dark:bg-stone-950">
@@ -37,29 +41,6 @@ export default async function Home() {
                 <SectionLabel label="Top Story" />
                 <ArticleCard article={leadArticle} layout="hero" />
 
-                {/* Live updates strip */}
-                <div className="mt-6 border-t border-stone-200 pt-4">
-                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-red-700">
-                    <span className="relative flex h-2 w-2">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-700 opacity-75" />
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-red-700" />
-                    </span>
-                    Live Updates · Infrastructure Bill
-                  </div>
-                  <ul className="mt-3 space-y-2.5">
-                    {[
-                      "House progressives signal they will demand the climate package move alongside the bill",
-                      "President Reeves to address the nation at 10 a.m. Wednesday from the Rose Garden",
-                      "Treasury officials say first infrastructure dollars could flow within 60 days",
-                    ].map((t, i) => (
-                      <li key={i} className="flex items-start gap-3 font-body text-[15px] leading-relaxed text-stone-700 hover:text-black transition-colors cursor-pointer">
-                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-red-700" />
-                        <span className="flex-1">{t}</span>
-                        <ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0 text-stone-400" />
-                      </li>
-                    ))}
-                  </ul>
-                </div>
               </div>
 
               {/* Trending sidebar: 4 columns */}
@@ -113,6 +94,28 @@ export default async function Home() {
             </div>
           </div>
         </section>
+
+        {publishedEditorialArticles.length > 0 && (
+          <section className="border-b border-stone-200 dark:border-stone-800">
+            <div className="mx-auto max-w-[1400px] px-4 py-10">
+              <div className="mb-6 flex items-end justify-between border-b-2 border-black pb-3 dark:border-white">
+                <div>
+                  <h2 className="font-headline text-3xl font-black text-black dark:text-white">
+                    Latest from the Newsroom
+                  </h2>
+                  <p className="mt-1 font-sans text-sm text-stone-600 dark:text-stone-400">
+                    Newly published reporting from our editorial team.
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-x-8 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
+                {publishedEditorialArticles.slice(0, 3).map((article) => (
+                  <ArticleCard key={article.slug} article={article} layout="standard" />
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* ===== OPINION & ANALYSIS ===== */}
         <section id="opinions" className="border-b border-stone-200 bg-stone-50">
@@ -175,9 +178,6 @@ export default async function Home() {
           <div className="mx-auto max-w-[1400px] px-4 py-10">
             <div className="flex items-end justify-between border-b-2 border-black pb-3">
               <h2 className="font-headline text-3xl font-black text-black">More Headlines</h2>
-              <span className="flex items-center gap-1.5 font-sans text-xs font-bold uppercase tracking-wider text-stone-500">
-                <TrendingUp className="h-3.5 w-3.5" /> Updated minutes ago
-              </span>
             </div>
 
             <div className="mt-6 grid grid-cols-1 gap-x-8 sm:grid-cols-2 lg:grid-cols-4">

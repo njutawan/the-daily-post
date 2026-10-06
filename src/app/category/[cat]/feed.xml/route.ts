@@ -1,8 +1,10 @@
-import { getArticlesByCategory, categories } from "@/data/articles";
+import { categories, getPublicCategoryName } from "@/data/categories";
+import { getPublicArticleCatalog } from "@/lib/public-articles";
 import { generateRss } from "@/lib/rss";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-static";
+export const revalidate = 300;
 
 export async function generateStaticParams() {
   return categories
@@ -15,12 +17,12 @@ export async function GET(
   { params }: { params: Promise<{ cat: string }> }
 ) {
   const { cat } = await params;
-  const categoryName = categories.find(
-    (c) => c.toLowerCase() === cat.toLowerCase()
-  );
-  if (!categoryName || categoryName === "Live") notFound();
+  const categoryName = getPublicCategoryName(cat);
+  if (!categories.includes(categoryName) || categoryName === "Live") notFound();
 
-  const articles = getArticlesByCategory(categoryName);
+  const articles = (await getPublicArticleCatalog()).filter(
+    (article) => getPublicCategoryName(article.category) === categoryName
+  );
   const xml = generateRss(articles, {
     title: `${categoryName} — The Daily Post`,
     description: `The latest ${categoryName} coverage from The Daily Post newsroom.`,
@@ -30,7 +32,7 @@ export async function GET(
   return new Response(xml, {
     headers: {
       "Content-Type": "application/rss+xml; charset=utf-8",
-      "Cache-Control": "public, max-age=3600, s-maxage=3600",
+      "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
     },
   });
 }

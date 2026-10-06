@@ -4,8 +4,7 @@
  * Client view for `/member/billing`.
  *
  * Renders a summary at the top (total spent, current plan, next renewal),
- * then a table of the user's last 20 payments with mock invoice IDs and a
- * "Download invoice" link (mock — points to `#`).
+ * then a table of the user's recent Stripe payments with real hosted invoice links.
  */
 
 import Link from "next/link";
@@ -50,8 +49,7 @@ export function MemberBillingView({ user, payments, summary }: BillingViewProps)
           Billing history
         </h1>
         <p className="mt-1.5 text-sm text-stone-600 dark:text-stone-400 max-w-2xl">
-          A record of every payment you&rsquo;ve made to The Daily Post. Invoices
-          download as PDF (mock for this demo).
+          A record of your Stripe payments. Invoice PDFs become available here after Stripe confirms each payment.
         </p>
       </div>
 
@@ -134,15 +132,20 @@ export function MemberBillingView({ user, payments, summary }: BillingViewProps)
                     {p.providerInvoice ?? "—"}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Link
-                      href="#"
-                      onClick={(e) => e.preventDefault()}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-900"
-                      title="Mock invoice download"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      Download
-                    </Link>
+                    {p.invoicePdfUrl || p.hostedInvoiceUrl ? (
+                      <a
+                        href={p.invoicePdfUrl || p.hostedInvoiceUrl || undefined}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-900"
+                        title={p.invoicePdfUrl ? "Download Stripe invoice PDF" : "View Stripe invoice"}
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        {p.invoicePdfUrl ? "Download" : "View"}
+                      </a>
+                    ) : (
+                      <span className="text-xs text-stone-400">Pending</span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

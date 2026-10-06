@@ -65,6 +65,7 @@ export default async function EditArticlePage({ params }: PageProps) {
     slug: article.slug,
     title: article.title,
     excerpt: article.excerpt,
+    premium: article.premium,
     body: article.body,
     status: article.status as ArticleStatus,
     category: article.category,

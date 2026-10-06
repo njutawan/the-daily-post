@@ -22,7 +22,14 @@ function getEnv(key: string, fallback = ""): string {
 }
 
 export const env = {
-  DATABASE_URL: getEnv("DATABASE_URL", "file:./db/custom.db"),
+  DATABASE_URL: getEnv(
+    "DATABASE_URL",
+    "postgresql://postgres:postgres@127.0.0.1:5432/the_daily_post?schema=public"
+  ),
+  DIRECT_URL: getEnv(
+    "DIRECT_URL",
+    "postgresql://postgres:postgres@127.0.0.1:5432/the_daily_post?schema=public"
+  ),
   // In production, set ADMIN_PASSWORD in Vercel env vars. If empty,
   // the /api/admin/login route rejects all login attempts (correct
   // behavior — no admin access without a configured password).

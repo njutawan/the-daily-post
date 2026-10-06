@@ -11,8 +11,8 @@ import { rateLimitResponse } from "@/lib/rate-limit";
  */
 export async function POST(req: Request) {
   // Rate limit: 10 req/min per IP (sign out).
-  const limited = rateLimitResponse(req, { max: 10, windowMs: 60_000 });
-  if (limited) return new NextResponse(limited.body, { status: 429, headers: limited.headers });
+  const limited = await rateLimitResponse(req, { max: 10, windowMs: 60_000 });
+  if (limited) return limited;
 
   return NextResponse.json({ ok: true });
 }

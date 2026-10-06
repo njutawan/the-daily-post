@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Search, X, TrendingUp, CornerDownLeft } from "lucide-react";
-import { allArticles, searchArticles } from "@/data/articles";
+import type { ArticleSummary } from "@/lib/article-summary";
 import { cn } from "@/lib/utils";
 
 type SearchCommandProps = {
@@ -24,25 +24,53 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
   const router = useRouter();
   const [query, setQuery] = React.useState("");
   const [activeIndex, setActiveIndex] = React.useState(0);
+  const [results, setResults] = React.useState<ArticleSummary[]>([]);
+  const [resultsQuery, setResultsQuery] = React.useState<string | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
-
-  const results = React.useMemo(() => {
-    if (!query.trim()) return allArticles.slice(0, 6);
-    return searchArticles(query).slice(0, 8);
-  }, [query]);
+  const currentResults = resultsQuery === query ? results : [];
+  const isLoading = open && resultsQuery !== query;
 
   React.useEffect(() => {
-    if (open) {
-      setQuery("");
-      setActiveIndex(0);
-      const t = setTimeout(() => inputRef.current?.focus(), 50);
-      return () => clearTimeout(t);
-    }
+    if (!open) return;
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/article-index?q=${encodeURIComponent(query)}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("Article search is unavailable.");
+        const payload = await response.json() as { articles?: ArticleSummary[] };
+        if (!Array.isArray(payload.articles)) throw new Error("Invalid article search response.");
+        if (!controller.signal.aborted) {
+          setResults(payload.articles);
+          setResultsQuery(query);
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          setResults([]);
+          setResultsQuery(query);
+        }
+      }
+    }, query.trim() ? 120 : 0);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [open, query]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const timer = window.setTimeout(() => inputRef.current?.focus(), 50);
+    return () => window.clearTimeout(timer);
   }, [open]);
 
-  React.useEffect(() => {
+  function updateQuery(nextQuery: string) {
+    setQuery(nextQuery);
     setActiveIndex(0);
-  }, [query]);
+  }
 
   function go(articleSlug: string) {
     onOpenChange(false);
@@ -52,13 +80,13 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex((i) => Math.min(i + 1, results.length - 1));
+      setActiveIndex((i) => currentResults.length === 0 ? 0 : Math.min(i + 1, currentResults.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActiveIndex((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter" && results[activeIndex]) {
+    } else if (e.key === "Enter" && currentResults[activeIndex]) {
       e.preventDefault();
-      go(results[activeIndex].slug);
+      go(currentResults[activeIndex].slug);
     } else if (e.key === "Escape") {
       onOpenChange(false);
     }
@@ -86,7 +114,7 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
             ref={inputRef}
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => updateQuery(e.target.value)}
             onKeyDown={onKeyDown}
             placeholder="Search The Daily Post…"
             className="h-14 w-full bg-transparent font-headline text-lg text-stone-900 outline-none placeholder:text-stone-400 dark:text-stone-100"
@@ -112,7 +140,7 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
                 {trendingQueries.map((t) => (
                   <button
                     key={t}
-                    onClick={() => setQuery(t)}
+                    onClick={() => updateQuery(t)}
                     className="rounded-full border border-stone-300 px-3 py-1 font-sans text-xs text-stone-700 hover:border-black hover:bg-black hover:text-white dark:border-stone-600 dark:text-stone-300 dark:hover:border-white dark:hover:bg-white dark:hover:text-black"
                   >
                     {t}
@@ -125,7 +153,11 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
             </div>
           )}
 
-          {results.length === 0 ? (
+          {isLoading ? (
+            <div className="px-4 py-10 text-center font-sans text-sm text-stone-500">
+              Loading articles…
+            </div>
+          ) : currentResults.length === 0 ? (
             <div className="px-4 py-10 text-center">
               <p className="font-headline text-lg text-stone-700 dark:text-stone-300">
                 No results for “{query}”
@@ -136,7 +168,7 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
             </div>
           ) : (
             <ul className="py-2">
-              {results.map((article, i) => (
+              {currentResults.map((article, i) => (
                 <li key={article.slug}>
                   <button
                     onMouseEnter={() => setActiveIndex(i)}
@@ -199,7 +231,7 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
             </button>
           ) : (
             <span className="font-semibold uppercase tracking-wider">
-              {results.length} result{results.length === 1 ? "" : "s"}
+              {currentResults.length} result{currentResults.length === 1 ? "" : "s"}
             </span>
           )}
         </div>
