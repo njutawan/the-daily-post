@@ -348,11 +348,23 @@ export function Header() {
                 <BookmarkIcon className="h-4 w-4" />
                 Saved articles
               </Link>
-              <Button className="h-9 rounded-none bg-black text-xs font-bold uppercase tracking-wider dark:bg-white dark:text-black">
-                Subscribe
+              <Button
+                asChild
+                className="h-9 rounded-none bg-black text-xs font-bold uppercase tracking-wider dark:bg-white dark:text-black"
+              >
+                <Link href="/subscribe" onClick={() => setOpen(false)}>
+                  Subscribe
+                </Link>
               </Button>
-              <Button variant="outline" className="h-9 rounded-none text-xs font-bold uppercase tracking-wider">
-                Sign in
+              <Button
+                asChild
+                variant="outline"
+                className="h-9 rounded-none text-xs font-bold uppercase tracking-wider"
+              >
+                {/* Sign-in renders inline on /member when signed out */}
+                <Link href="/member" onClick={() => setOpen(false)}>
+                  Sign in
+                </Link>
               </Button>
             </div>
           </div>

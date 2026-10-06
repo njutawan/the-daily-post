@@ -19,8 +19,10 @@ export async function GET() {
     { loc: `${SITE_URL}/live`, priority: "0.9", changefreq: "always" },
     { loc: `${SITE_URL}/most-read`, priority: "0.8", changefreq: "hourly" },
     { loc: `${SITE_URL}/newsletters`, priority: "0.7", changefreq: "weekly" },
-    { loc: `${SITE_URL}/signin`, priority: "0.3", changefreq: "monthly" },
-    { loc: `${SITE_URL}/register`, priority: "0.3", changefreq: "monthly" },
+    // NOTE: /signin and /register do not exist as routes (sign-in renders
+    // inline on /member) — listing them here produced 404s for crawlers.
+    { loc: `${SITE_URL}/subscribe`, priority: "0.8", changefreq: "monthly" },
+    { loc: `${SITE_URL}/about`, priority: "0.4", changefreq: "monthly" },
     { loc: `${SITE_URL}/search`, priority: "0.3", changefreq: "weekly" },
     { loc: `${SITE_URL}/saved`, priority: "0.2", changefreq: "weekly" },
   ];
