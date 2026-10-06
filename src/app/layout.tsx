@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { UnifrakturMaguntia, Playfair_Display, Lora, Libre_Franklin } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
@@ -10,31 +10,39 @@ import { UnifiedAuthProvider } from "@/components/unified-auth-provider";
 import { Analytics } from "@/components/Analytics";
 import { SITE_URL } from "@/lib/site";
 
-const fontLogo = UnifrakturMaguntia({
+/**
+ * Fonts are self-hosted (woff2 files in ./fonts, sourced from the
+ * @fontsource project) instead of fetched from Google Fonts at build
+ * time. This keeps `next build` working offline/behind a proxy and
+ * serves fonts from our own domain (no third-party request).
+ * The headline/body/sans files are variable fonts, so they cover the
+ * same weight ranges the previous next/font/google config requested.
+ */
+const fontLogo = localFont({
+  src: "./fonts/unifrakturmaguntia-latin-400-normal.woff2",
   variable: "--font-logo",
-  subsets: ["latin"],
   weight: "400",
   display: "swap",
 });
 
-const fontHeadline = Playfair_Display({
+const fontHeadline = localFont({
+  src: "./fonts/playfair-display-latin-wght-normal.woff2",
   variable: "--font-headline",
-  subsets: ["latin"],
-  weight: ["600", "700", "800", "900"],
+  weight: "400 900",
   display: "swap",
 });
 
-const fontBody = Lora({
+const fontBody = localFont({
+  src: "./fonts/lora-latin-wght-normal.woff2",
   variable: "--font-body",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  weight: "400 700",
   display: "swap",
 });
 
-const fontSans = Libre_Franklin({
+const fontSans = localFont({
+  src: "./fonts/libre-franklin-latin-wght-normal.woff2",
   variable: "--font-sans",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
+  weight: "100 900",
   display: "swap",
 });
 
