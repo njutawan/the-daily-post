@@ -23,6 +23,7 @@ export interface EditorArticleSummary {
   slug: string;
   title: string;
   excerpt: string | null;
+  premium?: boolean;
   status: ArticleStatus;
   category: string;
   tags: string;

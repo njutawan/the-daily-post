@@ -56,6 +56,7 @@ export function UnifiedAuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   const refresh = useCallback(async () => {
+    setLoading(true);
     try {
       const res = await fetch("/api/auth/me", { cache: "no-store" });
       if (!res.ok) {
@@ -89,8 +90,25 @@ export function UnifiedAuthProvider({ children }: { children: ReactNode }) {
   }, [router]);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    let cancelled = false;
+
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data.user ?? null;
+      })
+      .catch(() => null)
+      .then((currentUser) => {
+        if (cancelled) return;
+        setUser(currentUser);
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <AuthContext.Provider

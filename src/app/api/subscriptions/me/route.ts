@@ -8,8 +8,8 @@ import { rateLimitResponse } from "@/lib/rate-limit";
  */
 export async function GET(req: Request) {
   // Rate limit: 30 req/min per IP.
-  const limited = rateLimitResponse(req, { max: 30, windowMs: 60_000 });
-  if (limited) return new NextResponse(limited.body, { status: 429, headers: limited.headers });
+  const limited = await rateLimitResponse(req, { max: 30, windowMs: 60_000 });
+  if (limited) return limited;
 
   const user = await getSessionUser();
   if (!user) {

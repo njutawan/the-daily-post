@@ -1,163 +1,282 @@
+import { createHash } from "node:crypto";
+import { isIP } from "node:net";
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
+import { logger } from "@/lib/logger";
+
 /**
- * Rate limiter — prevents spam/abuse by capping requests per IP + user.
- *
- * Two modes:
- *   1. rateLimit(req, { max, windowMs }) — IP-based (for public endpoints)
- *   2. rateLimitByKey(key, { max, windowMs }) — custom key (e.g., ip + userId)
- *
- * The rateLimitByIpAndUser() helper combines both: anonymous users are
- * limited by IP, authenticated users by userId (so one user can't bypass
- * the limit by rotating IPs, and one IP can't bypass by creating
- * multiple accounts).
- *
- * Uses an in-memory sliding-window token bucket. On Vercel serverless,
- * each isolate has its own map — the limit is per-isolate, not global.
- * For strict global limits in production, replace the `buckets` Map with
- * @upstash/ratelimit + Redis (see https://github.com/upstash/ratelimit).
+ * Production rate limits are stored in Upstash Redis, so every Vercel
+ * function instance shares the same counters. Local development may fall back
+ * to an in-process limiter when Upstash credentials are not configured.
  */
+export type RateLimitOptions = {
+  max: number;
+  windowMs: number;
+};
+
+export type RateLimitResult = {
+  ok: boolean;
+  remaining: number;
+  resetAt: number;
+};
+
+export class RateLimitUnavailableError extends Error {
+  constructor(message = "The distributed rate-limit service is unavailable.") {
+    super(message);
+    this.name = "RateLimitUnavailableError";
+  }
+}
 
 type Bucket = {
   tokens: number;
   lastRefill: number;
 };
 
-const buckets = new Map<string, Bucket>();
-const MAX_BUCKETS = 10_000;
-
-type RateLimitOptions = {
-  max: number;
-  windowMs: number;
+type UpstashConfig = {
+  url: string;
+  token: string;
 };
 
-type RateLimitResult = {
-  ok: boolean;
-  remaining: number;
-  resetAt: number;
-};
-
-/** Extract the client IP from standard proxy headers. */
-export function getClientIp(req: Request): string {
-  const fwd = req.headers.get("x-forwarded-for") || "";
-  const realIp = req.headers.get("x-real-ip") || "";
-  const vercelFwd = req.headers.get("x-vercel-forwarded-for") || "";
-  return (
-    fwd.split(",")[0].trim() ||
-    realIp.trim() ||
-    vercelFwd.split(",")[0].trim() ||
-    "unknown"
-  );
-}
+const localBuckets = new Map<string, Bucket>();
+const MAX_LOCAL_BUCKETS = 10_000;
+const distributedLimiters = new Map<string, Ratelimit>();
+let redisClient: Redis | null = null;
+let redisConfigKey = "";
 
 /**
- * Core rate-limit check using a custom key. Use this when you want to
- * limit by user ID, IP+user, or any other composite key.
+ * Return a best-effort client IP. On Vercel prefer its platform header; on a
+ * self-hosted deployment, configure RATE_LIMIT_CLIENT_IP_HEADER to a header
+ * overwritten by the trusted reverse proxy. The X-Forwarded-For fallback is
+ * retained only for local development and legacy non-Vercel setups.
  */
-export function rateLimitByKey(
-  key: string,
-  opts: RateLimitOptions
-): RateLimitResult {
-  const now = Date.now();
+export function getClientIp(req: Request): string {
+  const trustedHeader = process.env.RATE_LIMIT_CLIENT_IP_HEADER?.trim();
+  const vercelForwardedFor = req.headers.get("x-vercel-forwarded-for") || "";
+  const forwardedFor = req.headers.get("x-forwarded-for") || "";
+  const realIp = req.headers.get("x-real-ip") || "";
 
-  // Periodic cleanup: trim oldest buckets if map is too large.
-  if (buckets.size > MAX_BUCKETS) {
-    const sorted = [...buckets.entries()].sort(
+  if (process.env.VERCEL === "1") {
+    const ip = vercelForwardedFor.split(",")[0]?.trim() || "";
+    return isIP(ip) ? ip : "unknown";
+  }
+
+  if (trustedHeader) {
+    const ip = req.headers.get(trustedHeader)?.trim() || "";
+    return !ip.includes(",") && isIP(ip) ? ip : "unknown";
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    const ip = (forwardedFor || realIp || vercelForwardedFor).split(",")[0]?.trim() || "";
+    return isIP(ip) ? ip : "unknown";
+  }
+
+  return "unknown";
+}
+
+function getUpstashConfig(): UpstashConfig | null {
+  const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+
+  if (!url && !token) return null;
+  if (!url || !token) {
+    throw new RateLimitUnavailableError(
+      "Both UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required."
+    );
+  }
+
+  return { url, token };
+}
+
+function getRedis(config: UpstashConfig): Redis {
+  const key = `${config.url}:${config.token}`;
+  if (!redisClient || redisConfigKey !== key) {
+    redisClient = new Redis({ url: config.url, token: config.token });
+    redisConfigKey = key;
+    distributedLimiters.clear();
+  }
+  return redisClient;
+}
+
+function getDistributedLimiter(config: UpstashConfig, options: RateLimitOptions): Ratelimit {
+  const key = `${options.max}:${options.windowMs}`;
+  let limiter = distributedLimiters.get(key);
+  if (!limiter) {
+    const windowSeconds = Math.max(1, Math.ceil(options.windowMs / 1000));
+    const environment = process.env.VERCEL_ENV || process.env.NODE_ENV || "development";
+    limiter = new Ratelimit({
+      redis: getRedis(config),
+      limiter: Ratelimit.slidingWindow(options.max, `${windowSeconds} s`),
+      prefix: `the-daily-post:${environment}:rate-limit:${options.max}:${options.windowMs}`,
+    });
+    distributedLimiters.set(key, limiter);
+  }
+  return limiter;
+}
+
+function limitLocally(key: string, options: RateLimitOptions): RateLimitResult {
+  const now = Date.now();
+  if (localBuckets.size > MAX_LOCAL_BUCKETS) {
+    const oldest = [...localBuckets.entries()].sort(
       (a, b) => a[1].lastRefill - b[1].lastRefill
     );
-    for (let i = 0; i < sorted.length / 2; i++) {
-      buckets.delete(sorted[i][0]);
+    for (let i = 0; i < Math.ceil(oldest.length / 2); i++) {
+      localBuckets.delete(oldest[i][0]);
     }
   }
 
-  const bucketKey = `${key}:${opts.max}:${opts.windowMs}`;
-  let bucket = buckets.get(bucketKey);
+  const bucketKey = `${key}:${options.max}:${options.windowMs}`;
+  let bucket = localBuckets.get(bucketKey);
   if (!bucket) {
-    bucket = { tokens: opts.max, lastRefill: now };
-    buckets.set(bucketKey, bucket);
+    bucket = { tokens: options.max, lastRefill: now };
+    localBuckets.set(bucketKey, bucket);
   }
 
-  // Refill tokens based on elapsed time (sliding window).
   const elapsed = now - bucket.lastRefill;
-  const refill = (elapsed / opts.windowMs) * opts.max;
-  bucket.tokens = Math.min(opts.max, bucket.tokens + refill);
+  bucket.tokens = Math.min(
+    options.max,
+    bucket.tokens + (elapsed / options.windowMs) * options.max
+  );
   bucket.lastRefill = now;
 
   if (bucket.tokens < 1) {
-    return { ok: false, remaining: 0, resetAt: now + opts.windowMs };
+    return { ok: false, remaining: 0, resetAt: now + options.windowMs };
   }
 
   bucket.tokens -= 1;
   return {
     ok: true,
     remaining: Math.floor(bucket.tokens),
-    resetAt: now + opts.windowMs,
+    resetAt: now + options.windowMs,
   };
 }
 
-/**
- * IP-based rate limit (original API, backwards-compatible).
- * Use for public endpoints that don't require authentication.
- */
-export function rateLimit(req: Request, opts: RateLimitOptions): RateLimitResult {
-  const ip = getClientId(req);
-  return rateLimitByKey(`ip:${ip}`, opts);
+function hashIdentifier(identifier: string): string {
+  return createHash("sha256").update(identifier).digest("hex");
 }
 
-/** @deprecated Use getClientIp() instead. */
-function getClientId(req: Request): string {
-  return getClientIp(req);
-}
-
-/**
- * Convenience helper: returns a 429 Response if rate-limited, null otherwise.
- */
-export function rateLimitResponse(
-  req: Request,
-  opts: RateLimitOptions
-): Response | null {
-  const result = rateLimit(req, opts);
-  if (result.ok) return null;
-  return new Response(
-    JSON.stringify({
-      ok: false,
-      error: "Too many requests. Please try again in a moment.",
-      retryAfter: Math.ceil((result.resetAt - Date.now()) / 1000),
-    }),
-    {
-      status: 429,
-      headers: {
-        "Content-Type": "application/json",
-        "Retry-After": String(
-          Math.ceil((result.resetAt - Date.now()) / 1000)
-        ),
-      },
-    }
-  );
-}
-
-/**
- * Convenience helper for key-based rate limiting.
- * Returns a 429 Response if rate-limited, null otherwise.
- */
-export function rateLimitByKeyResponse(
+export async function rateLimitByKey(
   key: string,
-  opts: RateLimitOptions
-): Response | null {
-  const result = rateLimitByKey(key, opts);
-  if (result.ok) return null;
+  options: RateLimitOptions
+): Promise<RateLimitResult> {
+  if (
+    process.env.NODE_ENV === "production" &&
+    (key === "ip:unknown" || key.startsWith("ip:unknown:"))
+  ) {
+    throw new RateLimitUnavailableError(
+      "A trusted client-IP header is required for production rate limiting."
+    );
+  }
+
+  let config: UpstashConfig | null;
+  try {
+    config = getUpstashConfig();
+  } catch (error) {
+    if (process.env.NODE_ENV === "production") throw error;
+    logger.warn({ err: error }, "[rate-limit] Upstash credentials are incomplete; using local limiter in development");
+    config = null;
+  }
+
+  if (!config) {
+    if (process.env.NODE_ENV === "production") {
+      throw new RateLimitUnavailableError(
+        "Distributed rate limiting is not configured. Set the Upstash Redis REST credentials."
+      );
+    }
+    return limitLocally(key, options);
+  }
+
+  try {
+    const result = await getDistributedLimiter(config, options).limit(hashIdentifier(key));
+    return {
+      ok: result.success,
+      remaining: result.remaining,
+      resetAt: result.reset,
+    };
+  } catch (error) {
+    logger.error({ err: error }, "[rate-limit] Upstash request failed");
+    if (process.env.NODE_ENV === "production") {
+      throw new RateLimitUnavailableError();
+    }
+    return limitLocally(key, options);
+  }
+}
+
+/** IP-based rate limit (public endpoint). */
+export async function rateLimit(
+  req: Request,
+  options: RateLimitOptions
+): Promise<RateLimitResult> {
+  return rateLimitByKey(`ip:${getClientIp(req)}`, options);
+}
+
+function rateLimitUnavailableResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      ok: false,
+      error: "Rate limiting is temporarily unavailable. Please try again shortly.",
+    }),
+    {
+      status: 503,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+        "Retry-After": "5",
+      },
+    }
+  );
+}
+
+function rateLimitExceededResponse(result: RateLimitResult, options: RateLimitOptions): Response {
+  const retryAfter = Math.max(1, Math.ceil((result.resetAt - Date.now()) / 1000));
   return new Response(
     JSON.stringify({
       ok: false,
       error: "Too many requests. Please try again in a moment.",
-      retryAfter: Math.ceil((result.resetAt - Date.now()) / 1000),
+      retryAfter,
     }),
     {
       status: 429,
       headers: {
         "Content-Type": "application/json",
-        "Retry-After": String(
-          Math.ceil((result.resetAt - Date.now()) / 1000)
-        ),
+        "Cache-Control": "no-store",
+        "Retry-After": String(retryAfter),
+        "X-RateLimit-Limit": String(options.max),
+        "X-RateLimit-Remaining": "0",
       },
     }
   );
+}
+
+/** Convenience helper: a 429 response when limited, 503 when the global store is unavailable. */
+export async function rateLimitResponse(
+  req: Request,
+  options: RateLimitOptions
+): Promise<Response | null> {
+  try {
+    const result = await rateLimit(req, options);
+    return result.ok ? null : rateLimitExceededResponse(result, options);
+  } catch (error) {
+    if (error instanceof RateLimitUnavailableError) {
+      return rateLimitUnavailableResponse();
+    }
+    logger.error({ err: error }, "[rate-limit] unexpected failure");
+    return rateLimitUnavailableResponse();
+  }
+}
+
+/** Keyed rate-limit helper (e.g. combined IP + authenticated user). */
+export async function rateLimitByKeyResponse(
+  key: string,
+  options: RateLimitOptions
+): Promise<Response | null> {
+  try {
+    const result = await rateLimitByKey(key, options);
+    return result.ok ? null : rateLimitExceededResponse(result, options);
+  } catch (error) {
+    if (error instanceof RateLimitUnavailableError) {
+      return rateLimitUnavailableResponse();
+    }
+    logger.error({ err: error }, "[rate-limit] unexpected keyed limit failure");
+    return rateLimitUnavailableResponse();
+  }
 }

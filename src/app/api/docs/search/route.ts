@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchLibraries } from "@/lib/context7";
 import { getSessionUser } from "@/lib/auth-unified";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimitResponse } from "@/lib/rate-limit";
 
 /**
  * GET /api/docs/search?q=<query>&limit=<n>
@@ -20,10 +20,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const limit = rateLimit(req, { max: 30, windowMs: 60_000 });
-  if (!limit.ok) {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
-  }
+  const limit = await rateLimitResponse(req, { max: 30, windowMs: 60_000 });
+  if (limit) return limit;
 
   const url = req.nextUrl;
   const q = url.searchParams.get("q") || "";

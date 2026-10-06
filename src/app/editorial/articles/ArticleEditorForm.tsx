@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -29,6 +30,7 @@ interface ArticleEditorFormProps {
   initial?: {
     title?: string;
     excerpt?: string | null;
+    premium?: boolean;
     body?: string | null;
     category?: string;
     tags?: string | null;
@@ -67,6 +69,7 @@ export function ArticleEditorForm({
   const router = useRouter();
   const [title, setTitle] = useState(initial?.title ?? "");
   const [excerpt, setExcerpt] = useState(initial?.excerpt ?? "");
+  const [premium, setPremium] = useState(initial?.premium ?? false);
   const [category, setCategory] = useState<ArticleCategory>(
     (initial?.category as ArticleCategory) ?? "politics",
   );
@@ -87,6 +90,7 @@ export function ArticleEditorForm({
     return {
       title: title.trim(),
       excerpt: excerpt.trim() || null,
+      premium,
       body,
       category,
       tags: tags.trim(),
@@ -252,6 +256,23 @@ export function ArticleEditorForm({
           <span className={excerpt.length > EXCERPT_MAX - 30 ? "text-amber-700" : ""}>
             {excerpt.length}/{EXCERPT_MAX}
           </span>
+        </div>
+      </div>
+
+      <div className="flex items-start gap-3 rounded-md border border-stone-200 bg-stone-50 p-4 dark:border-stone-800 dark:bg-stone-950">
+        <Checkbox
+          id="premium-article"
+          checked={premium}
+          onCheckedChange={(checked) => setPremium(checked === true)}
+          disabled={disabled}
+        />
+        <div>
+          <Label htmlFor="premium-article" className="text-sm font-semibold">
+            Subscriber-only article
+          </Label>
+          <p className="mt-1 text-xs text-stone-500">
+            Hide the full article body from readers without a current Stripe entitlement.
+          </p>
         </div>
       </div>
 

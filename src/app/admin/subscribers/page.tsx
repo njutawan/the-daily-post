@@ -18,6 +18,8 @@ export default async function AdminSubscribersPage() {
     id: string;
     email: string;
     source: string;
+    verified: boolean;
+    unsubscribedAt: Date | null;
     createdAt: Date;
   }> = [];
   let error: string | null = null;
@@ -25,7 +27,14 @@ export default async function AdminSubscribersPage() {
   try {
     subscribers = await db.subscriber.findMany({
       orderBy: { createdAt: "desc" },
-      select: { id: true, email: true, source: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        source: true,
+        verified: true,
+        unsubscribedAt: true,
+        createdAt: true,
+      },
     });
   } catch (err) {
     console.error("[/admin/subscribers] error", err);
@@ -36,6 +45,7 @@ export default async function AdminSubscribersPage() {
     acc[s.source] = (acc[s.source] || 0) + 1;
     return acc;
   }, {});
+  const activeCount = subscribers.filter((s) => s.verified && !s.unsubscribedAt).length;
 
   return (
     <div className="flex min-h-screen flex-col bg-white dark:bg-stone-950">
@@ -70,7 +80,7 @@ export default async function AdminSubscribersPage() {
                   Subscribers
                 </h1>
                 <p className="mt-1 font-body text-base italic text-stone-600 dark:text-stone-400">
-                  {subscribers.length} {subscribers.length === 1 ? "reader" : "readers"} subscribed to The Daily Post.
+                  {activeCount} active {activeCount === 1 ? "newsletter subscriber" : "newsletter subscribers"} ({subscribers.length} total records).
                 </p>
               </div>
             </div>
@@ -123,7 +133,10 @@ export default async function AdminSubscribersPage() {
                         Source
                       </th>
                       <th className="px-3 py-2 font-sans text-[11px] font-bold uppercase tracking-wider text-stone-700 dark:text-stone-300">
-                        Subscribed
+                        Status
+                      </th>
+                      <th className="px-3 py-2 font-sans text-[11px] font-bold uppercase tracking-wider text-stone-700 dark:text-stone-300">
+                        Signup requested
                       </th>
                     </tr>
                   </thead>
@@ -139,6 +152,11 @@ export default async function AdminSubscribersPage() {
                         <td className="px-3 py-3">
                           <span className="rounded-sm bg-stone-200 px-2 py-0.5 font-sans text-[10px] font-bold uppercase tracking-wider text-stone-700 dark:bg-stone-800 dark:text-stone-300">
                             {s.source}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className="rounded-sm bg-stone-100 px-2 py-0.5 font-sans text-[10px] font-bold uppercase tracking-wider text-stone-700 dark:bg-stone-800 dark:text-stone-300">
+                            {s.unsubscribedAt ? "Unsubscribed" : s.verified ? "Active" : "Pending"}
                           </span>
                         </td>
                         <td className="px-3 py-3 font-sans text-xs text-stone-500 dark:text-stone-400">

@@ -18,8 +18,8 @@ export async function PATCH(
   const user = await getSessionUser();
   const ip = getClientIp(req);
   const key = `ip:${ip}:user:${user?.id || "anon"}`;
-  const limited = rateLimitByKeyResponse(key, { max: 20, windowMs: 60_000 });
-  if (limited) return new NextResponse(limited.body, { status: 429, headers: limited.headers });
+  const limited = await rateLimitByKeyResponse(key, { max: 20, windowMs: 60_000 });
+  if (limited) return limited;
   // Admin role guard — reject non-admin users.
   if (!user || user.role !== "admin") {
     return NextResponse.json({ error: "Admin access required." }, { status: 403 });
@@ -69,8 +69,8 @@ export async function DELETE(
   const user = await getSessionUser();
   const ip = getClientIp(req);
   const key = `ip:${ip}:user:${user?.id || "anon"}`;
-  const limited = rateLimitByKeyResponse(key, { max: 20, windowMs: 60_000 });
-  if (limited) return new NextResponse(limited.body, { status: 429, headers: limited.headers });
+  const limited = await rateLimitByKeyResponse(key, { max: 20, windowMs: 60_000 });
+  if (limited) return limited;
   // Admin role guard — reject non-admin users.
   if (!user || user.role !== "admin") {
     return NextResponse.json({ error: "Admin access required." }, { status: 403 });

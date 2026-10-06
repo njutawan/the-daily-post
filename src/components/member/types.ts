@@ -6,7 +6,7 @@
  */
 
 export type SubTier = "free" | "digital" | "allaccess";
-export type SubStatus = "active" | "canceled" | "expired" | "past_due";
+export type SubStatus = "active" | "canceled" | "expired" | "past_due" | "pending";
 
 export interface MemberUser {
   id: string;
@@ -26,6 +26,8 @@ export interface SubscriptionSummary {
   tier: SubTier;
   status: SubStatus;
   expiresAt: string | null;
+  hasStripeSubscription?: boolean;
+  cancelAtPeriodEnd?: boolean;
 }
 
 export interface ContinueReadingItem {
@@ -81,6 +83,8 @@ export interface PaymentItem {
   status: string;
   provider: string;
   providerInvoice: string | null;
+  invoicePdfUrl: string | null;
+  hostedInvoiceUrl: string | null;
   createdAt: string;
 }
 
@@ -113,6 +117,7 @@ export const STATUS_LABELS: Record<SubStatus, string> = {
   canceled: "Canceled",
   expired: "Expired",
   past_due: "Past due",
+  pending: "Pending",
 };
 
 export const PLAN_BADGE_CLASS: Record<SubTier, string> = {
@@ -126,6 +131,7 @@ export const STATUS_BADGE_CLASS: Record<SubStatus, string> = {
   canceled: "bg-stone-100 text-stone-700 border border-stone-300",
   expired: "bg-rose-100 text-rose-800 border border-rose-300",
   past_due: "bg-rose-100 text-rose-800 border border-rose-300",
+  pending: "bg-amber-100 text-amber-800 border border-amber-300",
 };
 
 export const PAYMENT_STATUS_BADGE_CLASS: Record<string, string> = {

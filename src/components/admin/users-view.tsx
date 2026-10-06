@@ -92,7 +92,7 @@ export function AdminUsersView({
       <DashboardPageHeader
         eyebrow="People"
         title="User Management"
-        description="Manage roles, subscription tier, status, and editorial byline for every reader, editor, and admin."
+        description="Manage account roles and editorial details. Subscription entitlements are synchronized from Stripe and shown read-only."
       />
 
       {/* Filter bar */}
@@ -325,11 +325,6 @@ function EditUserDialog({
 }) {
   const router = useRouter();
   const [role, setRole] = useState(user.role);
-  const [subTier, setSubTier] = useState(user.subTier);
-  const [subStatus, setSubStatus] = useState(user.subStatus);
-  const [subExpiresAt, setSubExpiresAt] = useState<string>(
-    user.subExpiresAt ? user.subExpiresAt.slice(0, 10) : ""
-  );
   const [name, setName] = useState(user.name ?? "");
   const [byline, setByline] = useState(user.byline ?? "");
   const [submitting, setSubmitting] = useState(false);
@@ -344,19 +339,11 @@ function EditUserDialog({
     }
     setSubmitting(true);
     try {
-      const body: Record<string, unknown> = {
+      const body = {
         role,
-        subTier,
-        subStatus,
         name: name.trim() || undefined,
         byline: byline.trim() || null,
       };
-      if (subExpiresAt) {
-        // Convert YYYY-MM-DD to ISO datetime at end of day.
-        body.subExpiresAt = new Date(subExpiresAt + "T23:59:59Z").toISOString();
-      } else {
-        body.subExpiresAt = null;
-      }
       const res = await fetch(`/api/admin/users/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -433,46 +420,15 @@ function EditUserDialog({
               )}
             </div>
 
-            <div>
-              <Label className="text-sm font-medium">Subscription tier</Label>
-              <Select value={subTier} onValueChange={setSubTier}>
-                <SelectTrigger className="w-full mt-1.5">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="free">Free</SelectItem>
-                  <SelectItem value="digital">Digital</SelectItem>
-                  <SelectItem value="allaccess">All Access</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label className="text-sm font-medium">Subscription status</Label>
-              <Select value={subStatus} onValueChange={setSubStatus}>
-                <SelectTrigger className="w-full mt-1.5">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="past_due">Past Due</SelectItem>
-                  <SelectItem value="canceled">Canceled</SelectItem>
-                  <SelectItem value="expired">Expired</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="user-expires" className="text-sm font-medium">
-                Subscription expires
-              </Label>
-              <Input
-                id="user-expires"
-                type="date"
-                value={subExpiresAt}
-                onChange={(e) => setSubExpiresAt(e.target.value)}
-                className="mt-1.5"
-              />
+            <div className="sm:col-span-2 rounded-md border border-stone-200 bg-stone-50 p-3 dark:border-stone-800 dark:bg-stone-950">
+              <Label className="text-sm font-medium">Stripe-managed subscription</Label>
+              <p className="mt-1 text-sm text-stone-700 dark:text-stone-300">
+                {titleCase(user.subTier)} · {titleCase(user.subStatus)}
+                {user.subExpiresAt ? ` · paid through ${user.subExpiresAt.slice(0, 10)}` : ""}
+              </p>
+              <p className="mt-1 text-xs text-stone-500">
+                Paid access is updated only from verified Stripe billing events. Manage changes in Stripe.
+              </p>
             </div>
           </div>
         </div>

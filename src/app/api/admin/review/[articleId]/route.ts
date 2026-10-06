@@ -3,7 +3,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireRole, type Role } from "@/lib/auth-unified";
 import { logger } from "@/lib/logger";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimitResponse } from "@/lib/rate-limit";
+import { revalidatePublicArticleCaches } from "@/lib/public-articles";
 
 const ReviewSchema = z.object({
   // approved → published, rejected → rejected, requested_changes → draft
@@ -35,10 +36,8 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
   }
 
   // Rate limit: 30 review actions per minute per admin.
-  const limit = rateLimit(req, { max: 30, windowMs: 60_000 });
-  if (!limit.ok) {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
-  }
+  const limit = await rateLimitResponse(req, { max: 30, windowMs: 60_000 });
+  if (limit) return limit;
 
   const body = await req.json().catch(() => null);
   const parsed = ReviewSchema.safeParse(body);
@@ -52,7 +51,10 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
   const { action, notes, featured } = parsed.data;
 
   try {
-    const article = await db.article.findUnique({ where: { id: articleId } });
+    const article = await db.article.findUnique({
+      where: { id: articleId },
+      include: { author: { select: { name: true, byline: true } } },
+    });
     if (!article) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
@@ -90,6 +92,14 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
         },
       }),
     ]);
+
+    if (action === "approved") {
+      revalidatePublicArticleCaches({
+        slug: updated.slug,
+        category: updated.category,
+        author: article.author,
+      });
+    }
 
     return NextResponse.json({ article: updated, review: { action, notes: review.notes } });
   } catch (err) {

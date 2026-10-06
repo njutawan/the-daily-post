@@ -129,8 +129,8 @@ export function MemberProfileView({ user }: ProfileViewProps) {
       }
       toast.success(
         cancelImmediate
-          ? "Subscription canceled immediately. Refund processing."
-          : "Subscription canceled. You'll keep access until the end of your billing cycle."
+          ? "Subscription canceled immediately. No refund was issued."
+          : "Cancellation scheduled. You’ll keep access until the end of your billing cycle."
       );
       await refresh();
       router.refresh();
@@ -323,9 +323,9 @@ export function MemberProfileView({ user }: ProfileViewProps) {
           </h2>
         </div>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-4 max-w-2xl">
-          Sign out clears your local session. Canceling a subscription ends your
-          access at the close of the current billing cycle (or immediately, if
-          you opt into a prorated refund).
+          Sign out clears your local session. You can schedule cancellation at
+          the end of your billing cycle or end access immediately. Immediate
+          cancellation does not automatically issue a refund.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <Button
@@ -371,10 +371,10 @@ export function MemberProfileView({ user }: ProfileViewProps) {
                   />
                   <div className="text-sm">
                     <Label htmlFor="cancel-immediate" className="cursor-pointer">
-                      Cancel immediately (prorated refund)
+                      Cancel immediately (end access now)
                     </Label>
                     <p className="text-[11px] text-stone-500 mt-0.5">
-                      End access now and refund the unused portion of your billing cycle.
+                      Access ends immediately. No refund is issued automatically.
                     </p>
                   </div>
                 </div>

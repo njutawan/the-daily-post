@@ -26,8 +26,7 @@ export const proxy = clerkMiddleware((_auth, req: NextRequest) => {
   // ── CSRF protection for state-changing API requests ──
   if (
     pathname.startsWith("/api/") &&
-    ["POST", "PATCH", "PUT", "DELETE"].includes(method) &&
-    !pathname.endsWith("/webhook")
+    ["POST", "PATCH", "PUT", "DELETE"].includes(method)
   ) {
     if (!verifyOrigin(req, { skipWebhook: true })) {
       return NextResponse.json(

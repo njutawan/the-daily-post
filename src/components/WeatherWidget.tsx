@@ -10,6 +10,7 @@ import {
   Wind,
   CloudFog,
 } from "lucide-react";
+import { useHydrated } from "@/hooks/use-hydrated";
 
 /**
  * Weather widget for the header.
@@ -20,7 +21,7 @@ import {
  * with the real city name if no weather API key is configured).
  *
  * The widget shows a neutral skeleton during SSR + initial hydration
- * (mounted guard prevents hydration mismatch), then fetches the
+ * (hydration guard prevents a mismatch), then fetches the
  * personalized weather on mount.
  */
 
@@ -63,13 +64,11 @@ const ICON_COLORS: Record<Condition, string> = {
 };
 
 export function WeatherWidget() {
-  const [mounted, setMounted] = React.useState(false);
+  const hydrated = useHydrated();
   const [weather, setWeather] = React.useState<WeatherData>(MOCK_WEATHER);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
-    setMounted(true);
-
     let cancelled = false;
 
     // Fetch weather from our server-side route. The route handles
@@ -98,7 +97,7 @@ export function WeatherWidget() {
   }, []);
 
   // SSR skeleton — matches the widget's final width to avoid layout shift.
-  if (!mounted || loading) {
+  if (!hydrated || loading) {
     return (
       <span className="hidden items-center gap-1.5 font-sans text-[11px] text-stone-500 dark:text-stone-400 sm:flex">
         <Sun className="h-3.5 w-3.5 text-amber-500" />

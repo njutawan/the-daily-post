@@ -22,8 +22,9 @@ export function verifyOrigin(req: NextRequest, opts?: { skipWebhook?: boolean })
 
   if (!STATE_CHANGING.has(method)) return true;
 
-  // Stripe webhook verifies its own signature — skip origin check.
-  if (opts?.skipWebhook && req.nextUrl.pathname.endsWith("/webhook")) {
+  // The Stripe webhook verifies its own timestamped signature. Its actual
+  // route is /api/webhooks/stripe (not /webhook), so exempt that exact path.
+  if (opts?.skipWebhook && req.nextUrl.pathname === "/api/webhooks/stripe") {
     return true;
   }
 

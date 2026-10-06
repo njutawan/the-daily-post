@@ -20,8 +20,8 @@ function adminToken(): string {
 
 export async function POST(req: NextRequest) {
   // Rate limit: 5 login attempts per minute per IP (prevent brute-force)
-  const limited = rateLimitResponse(req, { max: 5, windowMs: 60_000 });
-  if (limited) return new NextResponse(limited.body, { status: 429, headers: limited.headers });
+  const limited = await rateLimitResponse(req, { max: 5, windowMs: 60_000 });
+  if (limited) return limited;
 
   let body: { password?: unknown };
   try {

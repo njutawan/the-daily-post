@@ -4,10 +4,13 @@ import { db } from "@/lib/db";
 import { getSessionUser, requireRole, type Role } from "@/lib/auth-unified";
 import { logger } from "@/lib/logger";
 import { rateLimitByKeyResponse, getClientIp } from "@/lib/rate-limit";
+import { getArticleAccess } from "@/lib/paywall";
+import { revalidatePublicArticleCaches } from "@/lib/public-articles";
 
 const UpdateArticleSchema = z.object({
   title: z.string().min(3).max(200).optional(),
   excerpt: z.string().max(500).optional().nullable(),
+  premium: z.boolean().optional(),
   body: z.string().max(50000).optional(),
   category: z.enum([
     "politics", "world", "business", "tech",
@@ -39,8 +42,8 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
   // Rate limit: 30 req/min per IP+user (article CRUD).
   const ip = getClientIp(req);
   const key = `ip:${ip}:user:${user.id || "anon"}`;
-  const limited = rateLimitByKeyResponse(key, { max: 30, windowMs: 60_000 });
-  if (limited) return new NextResponse(limited.body, { status: 429, headers: limited.headers });
+  const limited = await rateLimitByKeyResponse(key, { max: 30, windowMs: 60_000 });
+  if (limited) return limited;
 
   try {
     const article = await db.article.findUnique({
@@ -58,15 +61,34 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    // Scope check
+    // Scope check. Treat legacy/unknown roles as readers, never as staff.
+    const isStaff = user.role === "editor" || user.role === "admin";
     if (user.role === "editor" && article.authorId !== user.id && article.status !== "published") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    if (user.role === "reader" && article.status !== "published") {
+    if (!isStaff && article.status !== "published") {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ article });
+    if (!isStaff) {
+      const access = await getArticleAccess({
+        slug: article.slug,
+        isPremium: article.premium,
+        sessionUser: user,
+        requestHeaders: req.headers,
+      });
+      if (!access.allowed) {
+        return NextResponse.json(
+          { article: { ...article, body: undefined }, access },
+          { status: 402, headers: { "Cache-Control": "private, no-store" } },
+        );
+      }
+    }
+
+    return NextResponse.json(
+      { article },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   } catch (err) {
     logger.error({ err }, "[api/articles/[id]] GET failed");
     return NextResponse.json({ error: "Failed to fetch article" }, { status: 500 });
@@ -88,8 +110,8 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
   // Rate limit: 30 req/min per IP+user (article CRUD).
   const ip = getClientIp(req);
   const key = `ip:${ip}:user:${user.id || "anon"}`;
-  const limited = rateLimitByKeyResponse(key, { max: 30, windowMs: 60_000 });
-  if (limited) return new NextResponse(limited.body, { status: 429, headers: limited.headers });
+  const limited = await rateLimitByKeyResponse(key, { max: 30, windowMs: 60_000 });
+  if (limited) return limited;
 
   const body = await req.json().catch(() => null);
   const parsed = UpdateArticleSchema.safeParse(body);
@@ -101,7 +123,10 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
   }
 
   try {
-    const existing = await db.article.findUnique({ where: { id } });
+    const existing = await db.article.findUnique({
+      where: { id },
+      include: { author: { select: { name: true, byline: true } } },
+    });
     if (!existing) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
@@ -128,7 +153,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     const update: Record<string, unknown> = { ...parsed.data };
     // If an editor modifies content of a pending_review article, move it back to draft.
     if (user.role === "editor" && existing.status === "pending_review") {
-      const contentFields = ["title", "excerpt", "body", "category", "tags", "heroImage", "heroCaption"];
+      const contentFields = ["title", "excerpt", "body", "premium", "category", "tags", "heroImage", "heroCaption"];
       if (contentFields.some((f) => f in update)) {
         update.status = "draft";
         update.reviewerId = null;
@@ -139,7 +164,11 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     const article = await db.article.update({
       where: { id },
       data: update,
+      include: { author: { select: { name: true, byline: true } } },
     });
+    if (existing.status === "published" || article.status === "published") {
+      revalidatePublicArticleCaches(existing, article);
+    }
     return NextResponse.json({ article });
   } catch (err) {
     logger.error({ err }, "[api/articles/[id]] PATCH failed");
@@ -162,11 +191,14 @@ export async function DELETE(req: NextRequest, ctx: RouteContext) {
   // Rate limit: 30 req/min per IP+user (article CRUD).
   const ip = getClientIp(req);
   const key = `ip:${ip}:user:${user.id || "anon"}`;
-  const limited = rateLimitByKeyResponse(key, { max: 30, windowMs: 60_000 });
-  if (limited) return new NextResponse(limited.body, { status: 429, headers: limited.headers });
+  const limited = await rateLimitByKeyResponse(key, { max: 30, windowMs: 60_000 });
+  if (limited) return limited;
 
   try {
-    const existing = await db.article.findUnique({ where: { id } });
+    const existing = await db.article.findUnique({
+      where: { id },
+      include: { author: { select: { name: true, byline: true } } },
+    });
     if (!existing) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
@@ -184,6 +216,9 @@ export async function DELETE(req: NextRequest, ctx: RouteContext) {
     }
 
     await db.article.delete({ where: { id } });
+    if (existing.status === "published") {
+      revalidatePublicArticleCaches(existing);
+    }
     return NextResponse.json({ ok: true });
   } catch (err) {
     logger.error({ err }, "[api/articles/[id]] DELETE failed");

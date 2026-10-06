@@ -3,21 +3,17 @@
 /**
  * Client view for `/member/subscribe`.
  *
- * Renders a grid of subscription plan cards (hard-coded catalog matching
- * `/api/subscriptions/plans`) plus a payment `Dialog` with a mock credit
- * card form. On success the dialog shows a checkmark animation and the user
- * is redirected to `/member` after a short delay.
+ * Renders subscription plan cards and starts Stripe-hosted Checkout sessions.
+ * Card details are collected only by Stripe, never by this application.
  */
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Check,
   CreditCard,
   Loader2,
   ShieldCheck,
-  AlertCircle,
   X,
   ArrowRight,
 } from "lucide-react";
@@ -27,8 +23,6 @@ import { toast } from "sonner";
 import { MemberShell } from "@/components/member/member-shell";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   PLAN_BADGE_CLASS,
   STATUS_BADGE_CLASS,
@@ -115,67 +109,70 @@ const PLANS: Plan[] = [
 type PaymentState =
   | { kind: "form" }
   | { kind: "processing" }
-  | { kind: "success"; plan: Plan }
   | { kind: "error"; message: string };
 
 interface SubscribeViewProps {
   user: MemberUser;
   subscription: SubscriptionSummary;
+  initialPlan?: Plan["id"] | null;
 }
 
-export function MemberSubscribeView({ user, subscription }: SubscribeViewProps) {
-  const router = useRouter();
-  const [openPlan, setOpenPlan] = useState<Plan | null>(null);
+export function MemberSubscribeView({ user, subscription, initialPlan }: SubscribeViewProps) {
+  const [openPlan, setOpenPlan] = useState<Plan | null>(() =>
+    initialPlan ? PLANS.find((candidate) => candidate.id === initialPlan) ?? null : null,
+  );
   const [paymentState, setPaymentState] = useState<PaymentState>({ kind: "form" });
-  const [card, setCard] = useState({ number: "", expiry: "", cvc: "", name: "" });
+  const [portalLoading, setPortalLoading] = useState(false);
 
   function closeDialog() {
     if (paymentState.kind === "processing") return;
     setOpenPlan(null);
     setPaymentState({ kind: "form" });
-    setCard({ number: "", expiry: "", cvc: "", name: "" });
   }
 
   function openPlanDialog(plan: Plan) {
     setPaymentState({ kind: "form" });
-    setCard({ number: "", expiry: "", cvc: "", name: "" });
     setOpenPlan(plan);
   }
 
   async function handlePay() {
     if (!openPlan) return;
-    if (!card.number || !card.expiry || !card.cvc || !card.name) {
-      toast.error("Please fill in all card fields.");
-      return;
-    }
     setPaymentState({ kind: "processing" });
     try {
       const res = await fetch("/api/subscriptions/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          planId: openPlan.id,
-          paymentToken: `mock_${Date.now()}`,
-        }),
+        body: JSON.stringify({ planId: openPlan.id }),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok) {
+      if (!res.ok || typeof data?.checkoutUrl !== "string") {
         const message =
           (data && typeof data.error === "string" && data.error) ||
-          "Payment failed. Please try again.";
+          "Could not start secure checkout. Please try again.";
         setPaymentState({ kind: "error", message });
         toast.error(message);
         return;
       }
-      setPaymentState({ kind: "success", plan: openPlan });
-      toast.success(`You're now on the ${openPlan.name} plan!`);
-      // Redirect after 2 seconds so the success state has time to show.
-      setTimeout(() => {
-        router.push("/member");
-      }, 2000);
+      window.location.assign(data.checkoutUrl);
     } catch {
       setPaymentState({ kind: "error", message: "Network error. Please try again." });
       toast.error("Network error. Please try again.");
+    }
+  }
+
+  async function handleOpenPortal() {
+    if (portalLoading) return;
+    setPortalLoading(true);
+    try {
+      const res = await fetch("/api/subscriptions/portal", { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || typeof data?.url !== "string") {
+        throw new Error(data?.error || "Could not open billing management.");
+      }
+      window.location.assign(data.url);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not open billing management.");
+      setPortalLoading(false);
     }
   }
 
@@ -231,12 +228,24 @@ export function MemberSubscribeView({ user, subscription }: SubscribeViewProps) 
               )}
             </div>
           </div>
-          <Link
-            href="/member/billing"
-            className="text-xs uppercase tracking-[0.18em] text-emerald-700 hover:text-emerald-900"
-          >
-            View billing history →
-          </Link>
+          <div className="flex flex-wrap items-center gap-4">
+            {subscription.hasStripeSubscription && (
+              <button
+                type="button"
+                onClick={handleOpenPortal}
+                disabled={portalLoading}
+                className="text-xs uppercase tracking-[0.18em] text-emerald-700 hover:text-emerald-900 disabled:opacity-60"
+              >
+                {portalLoading ? "Opening…" : "Manage billing →"}
+              </button>
+            )}
+            <Link
+              href="/member/billing"
+              className="text-xs uppercase tracking-[0.18em] text-emerald-700 hover:text-emerald-900"
+            >
+              View billing history →
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -304,7 +313,9 @@ export function MemberSubscribeView({ user, subscription }: SubscribeViewProps) 
                   current={current}
                   isUpgrade={isUpgrade}
                   isDowngrade={isDowngrade}
+                  hasStripeSubscription={Boolean(subscription.hasStripeSubscription)}
                   onSubscribe={() => openPlanDialog(plan)}
+                  onManageBilling={handleOpenPortal}
                 />
               </div>
             </div>
@@ -316,9 +327,8 @@ export function MemberSubscribeView({ user, subscription }: SubscribeViewProps) 
       <div className="mt-6 flex items-start gap-2 rounded-lg border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-950 p-4 text-xs text-stone-500">
         <ShieldCheck className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
         <span>
-          This demo uses a mock payment provider — no real card is charged. In
-          production, payments are processed by Stripe via a tokenized checkout
-          that never touches our servers.
+          Payments are handled on Stripe’s secure hosted checkout. Card details
+          never enter or pass through The Daily Post’s servers.
         </span>
       </div>
 
@@ -330,121 +340,56 @@ export function MemberSubscribeView({ user, subscription }: SubscribeViewProps) 
         }}
       >
         <DialogContent className="sm:max-w-md">
-          {paymentState.kind === "success" && openPlan ? (
-            <div className="text-center py-6">
-              <div className="mx-auto h-16 w-16 rounded-full bg-emerald-100 flex items-center justify-center mb-4">
-                <Check className="h-8 w-8 text-emerald-700" strokeWidth={3} />
-              </div>
-              <DialogTitle className="font-headline text-xl font-bold text-stone-900 dark:text-stone-50">
-                Payment successful
-              </DialogTitle>
-              <DialogDescription className="mt-2 text-sm">
-                You&rsquo;re now on the <strong>{paymentState.plan.name}</strong> plan.
-                Redirecting you to your dashboard…
-              </DialogDescription>
-              <div className="mt-4 flex items-center justify-center text-xs text-stone-500 gap-1.5">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Redirecting…
-              </div>
+          <DialogHeader>
+            <DialogTitle className="font-headline">
+              {openPlan && `Subscribe to ${openPlan.name}`}
+            </DialogTitle>
+            <DialogDescription>
+              {openPlan &&
+                `You’ll be charged ${formatPrice(openPlan.price)} ${openPlan.billingCycle === "annual" ? "per year" : "per month"}. Cancel anytime.`}
+            </DialogDescription>
+          </DialogHeader>
+
+          {paymentState.kind === "error" && (
+            <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950/50 dark:text-rose-300">
+              {paymentState.message}
             </div>
-          ) : (
-            <>
-              <DialogHeader>
-                <DialogTitle className="font-headline">
-                  {openPlan && `Subscribe to ${openPlan.name}`}
-                </DialogTitle>
-                <DialogDescription>
-                  {openPlan &&
-                    `You'll be charged ${formatPrice(openPlan.price)} ${openPlan.billingCycle === "annual" ? "per year" : "per month"}. Cancel anytime.`}
-                </DialogDescription>
-              </DialogHeader>
-
-              {paymentState.kind === "error" && (
-                <div className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 dark:border-rose-900 dark:bg-rose-950/50 p-3 text-xs text-rose-700 dark:text-rose-300">
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>{paymentState.message}</span>
-                </div>
-              )}
-
-              <div className="grid gap-3 py-2">
-                <div className="grid gap-1.5">
-                  <Label htmlFor="card-number">Card number</Label>
-                  <Input
-                    id="card-number"
-                    inputMode="numeric"
-                    placeholder="4242 4242 4242 4242"
-                    value={card.number}
-                    onChange={(e) => setCard({ ...card, number: e.target.value })}
-                    disabled={paymentState.kind === "processing"}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="card-expiry">Expiry</Label>
-                    <Input
-                      id="card-expiry"
-                      placeholder="MM / YY"
-                      value={card.expiry}
-                      onChange={(e) => setCard({ ...card, expiry: e.target.value })}
-                      disabled={paymentState.kind === "processing"}
-                    />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="card-cvc">CVC</Label>
-                    <Input
-                      id="card-cvc"
-                      inputMode="numeric"
-                      placeholder="123"
-                      value={card.cvc}
-                      onChange={(e) => setCard({ ...card, cvc: e.target.value })}
-                      disabled={paymentState.kind === "processing"}
-                    />
-                  </div>
-                </div>
-                <div className="grid gap-1.5">
-                  <Label htmlFor="card-name">Name on card</Label>
-                  <Input
-                    id="card-name"
-                    placeholder="Jane Q. Reader"
-                    value={card.name}
-                    onChange={(e) => setCard({ ...card, name: e.target.value })}
-                    disabled={paymentState.kind === "processing"}
-                  />
-                </div>
-                <p className="text-[11px] text-stone-500 flex items-center gap-1.5">
-                  <ShieldCheck className="h-3 w-3" />
-                  Demo only — use any values. No real charge.
-                </p>
-              </div>
-
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={closeDialog}
-                  disabled={paymentState.kind === "processing"}
-                >
-                  <X className="h-3.5 w-3.5" /> Cancel
-                </Button>
-                <Button
-                  onClick={handlePay}
-                  disabled={paymentState.kind === "processing"}
-                  className="bg-emerald-700 hover:bg-emerald-800 text-white"
-                >
-                  {paymentState.kind === "processing" ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Processing…
-                    </>
-                  ) : (
-                    <>
-                      <CreditCard className="h-3.5 w-3.5" />
-                      {openPlan && `Pay ${formatPrice(openPlan.price)}`}
-                    </>
-                  )}
-                </Button>
-              </DialogFooter>
-            </>
           )}
+
+          <div className="flex items-start gap-3 rounded-md bg-stone-50 p-4 text-sm text-stone-600 dark:bg-stone-950 dark:text-stone-300">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
+            <p>
+              Continue to Stripe’s hosted checkout to enter your payment details
+              securely. The Daily Post never receives or stores your card number or CVC.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={closeDialog}
+              disabled={paymentState.kind === "processing"}
+            >
+              <X className="h-3.5 w-3.5" /> Cancel
+            </Button>
+            <Button
+              onClick={handlePay}
+              disabled={paymentState.kind === "processing"}
+              className="bg-emerald-700 text-white hover:bg-emerald-800"
+            >
+              {paymentState.kind === "processing" ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Opening Stripe…
+                </>
+              ) : (
+                <>
+                  <CreditCard className="h-3.5 w-3.5" />
+                  Continue to secure checkout
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </MemberShell>
@@ -456,19 +401,35 @@ function PlanCtaButton({
   current,
   isUpgrade,
   isDowngrade,
+  hasStripeSubscription,
   onSubscribe,
+  onManageBilling,
 }: {
   plan: Plan;
   current: boolean;
   isUpgrade: boolean;
   isDowngrade: boolean;
+  hasStripeSubscription: boolean;
   onSubscribe: () => void;
+  onManageBilling: () => void;
 }) {
   if (current) {
     return (
       <div className="w-full rounded-md border border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 text-center text-xs font-semibold uppercase tracking-wider text-emerald-700">
         Current plan
       </div>
+    );
+  }
+
+  if (hasStripeSubscription) {
+    return (
+      <button
+        onClick={onManageBilling}
+        className="w-full rounded-md border border-emerald-700 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-emerald-700 transition-colors hover:bg-emerald-700 hover:text-white"
+      >
+        Manage in Stripe
+        <ArrowRight className="ml-1 inline h-3 w-3" />
+      </button>
     );
   }
 

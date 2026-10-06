@@ -4,6 +4,34 @@ import * as React from "react";
 import Link from "next/link";
 import { X, Lock } from "lucide-react";
 
+const DISMISSED_KEY = "tdp:sticky-cta-dismissed";
+const DISMISSED_EVENT = "tdp:sticky-cta-dismissed-changed";
+let dismissedInMemory = false;
+
+function getDismissedSnapshot(): boolean {
+  if (typeof window === "undefined") return false;
+  if (dismissedInMemory) return true;
+  try {
+    return window.sessionStorage.getItem(DISMISSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function getDismissedServerSnapshot(): boolean {
+  return false;
+}
+
+function subscribeToDismissal(onChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(DISMISSED_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(DISMISSED_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
 /**
  * Sticky subscribe CTA — appears on article pages after the reader
  * scrolls past 50% of the article. Non-intrusive: bottom bar above
@@ -14,45 +42,47 @@ import { X, Lock } from "lucide-react";
  */
 export function StickySubscribeCTA() {
   const [visible, setVisible] = React.useState(false);
-  const [dismissed, setDismissed] = React.useState(false);
+  const dismissed = React.useSyncExternalStore(
+    subscribeToDismissal,
+    getDismissedSnapshot,
+    getDismissedServerSnapshot
+  );
 
   React.useEffect(() => {
-    // Don't show if already dismissed this session.
-    try {
-      if (sessionStorage.getItem("tdp:sticky-cta-dismissed")) {
-        setDismissed(true);
-        return;
-      }
-    } catch {
-      // sessionStorage not available (SSR) — ignore.
-    }
+    if (dismissed) return;
 
     let ticking = false;
+    let animationFrame = 0;
     const onScroll = () => {
       if (ticking) return;
       ticking = true;
-      requestAnimationFrame(() => {
+      animationFrame = requestAnimationFrame(() => {
         const scrolled = window.scrollY;
         const max = document.body.scrollHeight - window.innerHeight;
         const pct = max > 0 ? scrolled / max : 0;
         // Show after 50% scroll, hide in the last 15% (footer zone).
         setVisible(pct > 0.5 && pct < 0.85);
         ticking = false;
+        animationFrame = 0;
       });
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (animationFrame) cancelAnimationFrame(animationFrame);
+    };
+  }, [dismissed]);
 
   const dismiss = () => {
     setVisible(false);
-    setDismissed(true);
+    dismissedInMemory = true;
     try {
-      sessionStorage.setItem("tdp:sticky-cta-dismissed", "1");
+      window.sessionStorage.setItem(DISMISSED_KEY, "1");
     } catch {
       /* ignore */
     }
+    window.dispatchEvent(new Event(DISMISSED_EVENT));
   };
 
   if (dismissed || !visible) return null;

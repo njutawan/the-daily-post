@@ -24,6 +24,7 @@ export function NewsletterForm({
 }: NewsletterFormProps) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "done">("idle");
+  const [verificationUrl, setVerificationUrl] = useState("");
   const { toast } = useToast();
 
   async function handleSubmit(e: React.FormEvent) {
@@ -39,6 +40,7 @@ export function NewsletterForm({
       return;
     }
     setStatus("loading");
+    setVerificationUrl("");
     try {
       const res = await fetch("/api/subscribe", {
         method: "POST",
@@ -51,9 +53,10 @@ export function NewsletterForm({
       }
       setStatus("done");
       setEmail("");
+      setVerificationUrl(typeof data.verificationUrl === "string" ? data.verificationUrl : "");
       toast({
-        title: "You're in.",
-        description: data.message || "Thanks for subscribing to The Daily Post.",
+        title: data.verified ? "Already subscribed" : "Confirm your email",
+        description: data.message || "Check your inbox to finish signing up.",
       });
       setTimeout(() => setStatus("idle"), 3500);
     } catch (err) {
@@ -96,6 +99,14 @@ export function NewsletterForm({
           ) : null}
           {status === "done" ? "Done" : buttonLabel}
         </button>
+        {verificationUrl && (
+          <a
+            href={verificationUrl}
+            className="basis-full font-sans text-xs font-semibold underline underline-offset-4"
+          >
+            Open local development verification link
+          </a>
+        )}
       </form>
     );
   }
@@ -127,6 +138,14 @@ export function NewsletterForm({
         <span className="flex items-center gap-1 font-sans text-[11px] font-semibold text-green-700">
           <Check className="h-3 w-3" /> Welcome aboard
         </span>
+      )}
+      {verificationUrl && (
+        <a
+          href={verificationUrl}
+          className="basis-full font-sans text-xs font-semibold underline underline-offset-4"
+        >
+          Open local development verification link
+        </a>
       )}
     </form>
   );

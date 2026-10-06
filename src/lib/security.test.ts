@@ -61,13 +61,19 @@ describe("verifyOrigin", () => {
     ).toBe(false);
   });
 
-  it("bypasses origin checks only for webhook paths when requested", () => {
+  it("bypasses origin checks only for the signed Stripe webhook path when requested", () => {
+    expect(
+      verifyOrigin(
+        request("POST", { origin: "https://attacker.example" }, "https://news.example/api/webhooks/stripe"),
+        { skipWebhook: true },
+      ),
+    ).toBe(true);
     expect(
       verifyOrigin(
         request("POST", { origin: "https://attacker.example" }, "https://news.example/api/webhook"),
         { skipWebhook: true },
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       verifyOrigin(
         request("POST", { origin: "https://attacker.example" }, "https://news.example/api/payments"),

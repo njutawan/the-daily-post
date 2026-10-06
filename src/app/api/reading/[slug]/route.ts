@@ -20,8 +20,8 @@ export async function POST(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   // Rate limit: 30 req/min per IP (reading session tracking).
-  const limited = rateLimitResponse(req, { max: 30, windowMs: 60_000 });
-  if (limited) return new NextResponse(limited.body, { status: 429, headers: limited.headers });
+  const limited = await rateLimitResponse(req, { max: 30, windowMs: 60_000 });
+  if (limited) return limited;
 
   const { slug } = await params;
   if (!getArticleBySlug(slug)) {

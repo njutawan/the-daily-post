@@ -115,18 +115,10 @@ export function AdminDocsView({ user }: Props) {
     []
   );
 
-  useEffect(() => {
-    if (selected) {
-      // Fetch docs when a library is selected. The topic filter is NOT
-      // in deps — typing in the topic field shouldn't re-fetch on
-      // every keystroke. The "Filter" button calls fetchDocs explicitly.
-      fetchDocs(selected, topic);
-    }
-  }, [selected, fetchDocs]);
-
   function handleSelect(lib: Context7Library) {
     setSelected(lib);
     setDocs("");
+    fetchDocs(lib, topic);
   }
 
   function handleTopicSubmit(e: React.FormEvent) {

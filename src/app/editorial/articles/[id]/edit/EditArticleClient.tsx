@@ -223,6 +223,7 @@ export function EditArticleClient({
           initial={{
             title: article.title,
             excerpt: article.excerpt,
+            premium: article.premium,
             body: article.body,
             category: article.category,
             tags: article.tags,

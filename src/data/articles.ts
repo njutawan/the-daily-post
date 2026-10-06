@@ -1,3 +1,7 @@
+import { categories } from "./categories";
+
+export { categories } from "./categories";
+
 export type Article = {
   slug: string;
   title: string;
@@ -512,95 +516,6 @@ export function searchArticles(query: string): Article[] {
     return haystack.includes(q);
   });
 }
-
-export type LiveUpdate = {
-  id: string;
-  time: string; // display time
-  timestamp: string; // ISO
-  title: string;
-  body: string;
-  author: string;
-  highlight?: boolean;
-  tag?: string;
-};
-
-export const liveUpdates: LiveUpdate[] = [
-  {
-    id: "lu-1",
-    time: "12:42 a.m.",
-    timestamp: "2026-09-09T04:42:00Z",
-    title: "Senate gavels the bill through, 68-32",
-    body: "Vice President Marcus Hale, presiding, announced the result to a largely empty chamber. Nineteen Republicans joined every Democrat in support. Applause was brief and muted.",
-    author: "Eleanor Whitfield",
-    highlight: true,
-    tag: "Key vote",
-  },
-  {
-    id: "lu-2",
-    time: "12:18 a.m.",
-    timestamp: "2026-09-09T04:18:00Z",
-    title: "Final cloture vote clears 70-vote threshold",
-    body: "The motion to end debate cleared with 71 votes, all but guaranteeing passage on the final up-or-down vote. Two senators did not vote.",
-    author: "Eleanor Whitfield",
-    tag: "Procedural",
-  },
-  {
-    id: "lu-3",
-    time: "11:50 p.m.",
-    timestamp: "2026-09-09T03:50:00Z",
-    title: "Majority Leader Hinton: 'We got it done'",
-    body: "Speaking briefly off the floor, Hinton told a small pool of reporters that the compromise was 'not the bill any single senator wanted, but the bill the country needed.'",
-    author: "Daniel Park",
-    tag: "Reaction",
-  },
-  {
-    id: "lu-4",
-    time: "11:22 p.m.",
-    timestamp: "2026-09-09T03:22:00Z",
-    title: "White House prepares for a 10 a.m. Rose Garden address",
-    body: "Officials say President Reeves will sign the bill 'as soon as it reaches the desk' and plans to mark the moment with a morning address. House leaders have not yet committed to a vote date.",
-    author: "Eleanor Whitfield",
-    tag: "What's next",
-  },
-  {
-    id: "lu-5",
-    time: "10:45 p.m.",
-    timestamp: "2026-09-09T02:45:00Z",
-    title: "Climate provisions scaled back to win GOP votes",
-    body: "The final text drops several ambitious emissions measures that environmental groups had pressed for — a concession that drew sharp criticism from progressives even as it secured the Republican votes needed to break the filibuster.",
-    author: "Maya Brennan",
-    tag: "Analysis",
-  },
-  {
-    id: "lu-6",
-    time: "9:58 p.m.",
-    timestamp: "2026-09-09T01:58:00Z",
-    title: "Treasury: first dollars could flow within 60 days",
-    body: "A senior Treasury official, briefing reporters on background, said the department has already drafted interim guidance for the road-and-bridge funds and expects the first grants to be announced by early November.",
-    author: "Robert Kingsley",
-    tag: "Implementation",
-  },
-  {
-    id: "lu-7",
-    time: "9:10 p.m.",
-    timestamp: "2026-09-09T01:10:00Z",
-    title: "Construction unions celebrate on the steps",
-    body: "A few hundred workers gathered outside the Capitol cheered as word of the deal spread. 'We've been waiting on this for a decade,' one operating engineer said.",
-    author: "Terrence Mallow",
-    tag: "On the scene",
-  },
-];
-
-export const categories = [
-  "Politics",
-  "Opinions",
-  "World",
-  "Tech",
-  "Business",
-  "Climate",
-  "Sports",
-  "Live",
-];
 
 export const categoryCounts = categories
   .filter((c) => c !== "Live")

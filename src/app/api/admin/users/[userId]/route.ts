@@ -3,30 +3,23 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireRole, type Role } from "@/lib/auth-unified";
 import { logger } from "@/lib/logger";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimitResponse } from "@/lib/rate-limit";
 
 const UpdateUserSchema = z.object({
   role: z.enum(["reader", "editor", "admin"]).optional(),
-  subTier: z.enum(["free", "digital", "allaccess"]).optional(),
-  subStatus: z.enum(["active", "canceled", "expired", "past_due"]).optional(),
-  subExpiresAt: z.string().datetime().optional().nullable(),
   name: z.string().max(100).optional(),
   byline: z.string().max(100).optional().nullable(),
-}).refine(
-  // When subTier is being set to "free", the expiry must be cleared —
-  // a free tier has no expiry date.
-  (data) => !(data.subTier === "free" && data.subExpiresAt),
-  { message: "Free tier cannot have an expiry date — set subExpiresAt to null", path: ["subExpiresAt"] }
-);
+}).strict();
 
 type RouteContext = { params: Promise<{ userId: string }> };
 
 /**
- * PATCH /api/admin/users/[userId] — admin updates a user's role or subscription.
+ * PATCH /api/admin/users/[userId] — admin updates profile fields and editorial role.
+ * Subscription entitlements are read-only here and are synchronized from Stripe.
  *
  * Guards:
  *  - Admins cannot demote themselves (would lock themselves out).
- *  - Setting subTier to "free" requires subExpiresAt to be null.
+ *  - Subscription fields are rejected rather than manually granting paid access.
  *  - If the target user doesn't exist, return 404 (not a generic 500).
  */
 export async function PATCH(req: NextRequest, ctx: RouteContext) {
@@ -37,10 +30,8 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
   }
 
   // Rate limit: 60 user updates per minute per admin.
-  const limit = rateLimit(req, { max: 60, windowMs: 60_000 });
-  if (!limit.ok) {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
-  }
+  const limit = await rateLimitResponse(req, { max: 60, windowMs: 60_000 });
+  if (limit) return limit;
 
   const body = await req.json().catch(() => null);
   const parsed = UpdateUserSchema.safeParse(body);
@@ -67,21 +58,9 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const update: Record<string, unknown> = { ...parsed.data };
-    if (parsed.data.subExpiresAt !== undefined) {
-      update.subExpiresAt = parsed.data.subExpiresAt ? new Date(parsed.data.subExpiresAt) : null;
-    }
-    // If subTier is being set to free, also clear the expiry (defensive
-    // — the zod refine above should already prevent this, but we double
-    // check here in case the client sends both fields).
-    if (parsed.data.subTier === "free") {
-      update.subExpiresAt = null;
-      update.subStatus = parsed.data.subStatus ?? "active";
-    }
-
     const user = await db.user.update({
       where: { id: userId },
-      data: update,
+      data: parsed.data,
       select: {
         id: true, email: true, name: true, role: true,
         subTier: true, subStatus: true, subExpiresAt: true, byline: true,

@@ -14,6 +14,7 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import { useUnifiedAuth, type Role } from "@/components/unified-auth-provider";
+import { useHydrated } from "@/hooks/use-hydrated";
 
 const ROLE_LABEL: Record<Role, string> = {
   reader: "Member",
@@ -45,11 +46,9 @@ const WORKSPACES: { role: Role; href: string; label: string; icon: typeof PenLin
  */
 export function WorkspaceMenu() {
   const { user, loading, isSignedIn, signOut } = useUnifiedAuth();
-  const [mounted, setMounted] = React.useState(false);
+  const hydrated = useHydrated();
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => setMounted(true), []);
 
   React.useEffect(() => {
     if (!open) return;
@@ -69,7 +68,7 @@ export function WorkspaceMenu() {
     };
   }, [open]);
 
-  if (!mounted || loading) {
+  if (!hydrated || loading) {
     return (
       <span className="flex h-8 w-8 items-center justify-center">
         <Loader2 className="h-4 w-4 animate-spin text-stone-400" />

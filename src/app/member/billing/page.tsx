@@ -53,6 +53,8 @@ export default async function MemberBillingPage() {
     status: r.status,
     provider: r.provider,
     providerInvoice: r.providerInvoice,
+    invoicePdfUrl: r.invoicePdfUrl,
+    hostedInvoiceUrl: r.hostedInvoiceUrl,
     createdAt: r.createdAt.toISOString(),
   }));
 

@@ -9,8 +9,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -28,6 +29,11 @@ model User {
   subTier      String   @default("free")
   subStatus    String   @default("active") // active | canceled | expired | past_due
   subExpiresAt DateTime?
+  // Stripe billing linkage. Entitlements are granted only after verified webhooks.
+  stripeCustomerId             String?   @unique
+  stripeSubscriptionId          String?   @unique
+  stripeStatusUpdatedAt         DateTime?
+  subCancelAtPeriodEnd          Boolean   @default(false)
   // Editorial
   byline       String?
   createdAt    DateTime @default(now())
@@ -48,12 +54,14 @@ model User {
 }
 
 model Subscriber {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  source    String   @default("homepage")
-  verified  Boolean  @default(false)
-  verifyToken String?
-  createdAt DateTime @default(now())
+  id                   String    @id @default(cuid())
+  email                String    @unique
+  source               String    @default("homepage")
+  verified             Boolean   @default(false)
+  verifyToken          String?
+  unsubscribeTokenHash String?   @unique
+  unsubscribedAt       DateTime?
+  createdAt            DateTime  @default(now())
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -65,11 +73,13 @@ model Article {
   slug        String   @unique
   title       String
   excerpt     String?
+  // Premium articles are gated independently of the free monthly meter.
+  premium     Boolean  @default(false)
   // Markdown/MDX body content
   body        String   @default("")
   // Category/section: politics | world | business | tech | opinion | sports | climate | culture
   category    String   @default("politics")
-  // Tags stored as comma-separated string (SQLite has no native array)
+  // Tags are stored as a comma-separated string.
   tags        String   @default("")
   heroImage   String?
   heroCaption String?
@@ -198,14 +208,45 @@ model Payment {
   billingCycle String @default("monthly")
   // succeeded | pending | failed | refunded
   status     String   @default("pending")
-  // Mock provider: mock | stripe | paddle
-  provider   String   @default("mock")
+  // Payment processor: stripe | mock (legacy demo records)
+  provider   String   @default("stripe")
   providerInvoice String?
+  stripeCheckoutSessionId String? @unique
+  stripeInvoiceId String? @unique
+  stripeSubscriptionId String?
+  invoicePdfUrl String?
+  hostedInvoiceUrl String?
+  stripeStatusUpdatedAt DateTime?
   createdAt  DateTime @default(now())
 
   @@index([userId])
   @@index([status])
   @@index([tier])
+  @@index([stripeSubscriptionId])
+}
+
+// One row per unique article per metering identity and UTC calendar month.
+// meterKey is an HMAC hash; raw IP address/user-agent values are never stored.
+model ArticleMeterRead {
+  id          String   @id @default(cuid())
+  meterKey    String
+  articleSlug String
+  month       String
+  createdAt   DateTime @default(now())
+
+  @@unique([meterKey, articleSlug, month])
+  @@index([meterKey, month])
+  @@index([createdAt])
+}
+
+// Stripe retries webhook events. Persisting event ids in the same transaction
+// as entitlement/payment updates makes processing idempotent.
+model StripeWebhookEvent {
+  id          String   @id
+  type        String
+  processedAt DateTime @default(now())
+
+  @@index([processedAt])
 }
 
 model ReadingHistory {

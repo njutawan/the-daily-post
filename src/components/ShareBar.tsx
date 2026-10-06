@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useHydrated } from "@/hooks/use-hydrated";
 
 type ShareBarProps = {
   slug: string;
@@ -21,14 +22,10 @@ type ShareBarProps = {
 
 export function ShareBar({ slug, title, className }: ShareBarProps) {
   const [copied, setCopied] = React.useState(false);
-  const [origin, setOrigin] = React.useState("");
+  const hydrated = useHydrated();
   const { toast } = useToast();
 
-  // Get the origin on the client only (after mount) to avoid hydration mismatch
-  React.useEffect(() => {
-    setOrigin(window.location.origin);
-  }, []);
-
+  const origin = hydrated ? window.location.origin : "";
   const url = origin ? `${origin}/article/${slug}` : `/article/${slug}`;
   const encodedUrl = encodeURIComponent(url);
   const encodedTitle = encodeURIComponent(title);

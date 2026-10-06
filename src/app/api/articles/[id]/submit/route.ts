@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireRole, type Role } from "@/lib/auth-unified";
 import { logger } from "@/lib/logger";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimitResponse } from "@/lib/rate-limit";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -23,10 +23,8 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
   }
 
   // Rate limit: 20 submissions per minute per editor (prevent spam-submit).
-  const limit = rateLimit(req, { max: 20, windowMs: 60_000 });
-  if (!limit.ok) {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
-  }
+  const limit = await rateLimitResponse(req, { max: 20, windowMs: 60_000 });
+  if (limit) return limit;
 
   try {
     const article = await db.article.findUnique({ where: { id } });

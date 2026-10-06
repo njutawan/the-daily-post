@@ -49,7 +49,7 @@ export async function generateMetadata({
   const { name: param } = await params;
   // The URL param is slugified (e.g. "eleanor-whitfield"). Reverse-resolve
   // by matching against the static article author names.
-  const name = resolveAuthorName(param);
+  const name = await resolveAuthorName(param);
 
   if (!name) return { title: "Author not found — The Daily Post" };
 
@@ -87,16 +87,34 @@ export async function generateMetadata({
  * by looking it up in the static article catalog. Falls back to the
  * param itself if no match (so the notFound() path can render).
  */
-function resolveAuthorName(slugified: string): string | null {
-  // Try exact slug match first.
-  for (const a of allArticles) {
-    if (slugifyName(a.author) === slugified) return a.author;
+async function resolveAuthorName(slugified: string): Promise<string | null> {
+  const normalizedSlug = slugified.toLowerCase();
+  // Try the built-in author catalog first.
+  for (const article of allArticles) {
+    if (slugifyName(article.author) === normalizedSlug) return article.author;
   }
-  // Fallback: treat the param as a URL-decoded name (someone might have
-  // visited /author/Eleanor%20Whitman directly).
+
+  // Editorial authors may not exist in the static catalog. Resolve their
+  // public byline/name so published database articles have working profiles.
+  try {
+    const users = await db.user.findMany({
+      where: { role: { in: ["editor", "admin"] } },
+      select: { name: true, byline: true },
+    });
+    const user = users.find((candidate) =>
+      [candidate.byline, candidate.name]
+        .filter((value): value is string => Boolean(value?.trim()))
+        .some((value) => slugifyName(value) === normalizedSlug)
+    );
+    if (user) return user.byline?.trim() || user.name?.trim() || null;
+  } catch {
+    // Fall back to built-in authors if the database is unavailable.
+  }
+
+  // Also accept a URL-decoded display name for direct visits.
   const decoded = decodeURIComponent(slugified).replace(/-/g, " ");
-  for (const a of allArticles) {
-    if (a.author.toLowerCase() === decoded.toLowerCase()) return a.author;
+  for (const article of allArticles) {
+    if (article.author.toLowerCase() === decoded.toLowerCase()) return article.author;
   }
   return null;
 }
@@ -128,7 +146,7 @@ export default async function AuthorPage({
   const { name: param } = await params;
   // Resolve the slugified param (e.g. "eleanor-whitfield") to the actual
   // display name. Returns null if no matching author exists.
-  const name = resolveAuthorName(param);
+  const name = await resolveAuthorName(param);
   if (!name) {
     notFound();
   }

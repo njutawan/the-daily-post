@@ -1,7 +1,9 @@
-import { allArticles, categories } from "@/data/articles";
+import { categories } from "@/data/categories";
+import { getPublicArticleCatalog } from "@/lib/public-articles";
 import { SITE_URL } from "@/lib/site";
 
 export const dynamic = "force-static";
+export const revalidate = 300;
 
 type SitemapUrl = {
   loc: string;
@@ -11,6 +13,7 @@ type SitemapUrl = {
 };
 
 export async function GET() {
+  const publicArticles = await getPublicArticleCatalog();
   const staticUrls: SitemapUrl[] = [
     { loc: `${SITE_URL}/`, priority: "1.0", changefreq: "hourly" },
     { loc: `${SITE_URL}/live`, priority: "0.9", changefreq: "always" },
@@ -30,7 +33,7 @@ export async function GET() {
       changefreq: "hourly",
     }));
 
-  const articleUrls: SitemapUrl[] = allArticles.map((a) => ({
+  const articleUrls: SitemapUrl[] = publicArticles.map((a) => ({
     loc: `${SITE_URL}/article/${a.slug}`,
     priority: "0.7",
     changefreq: "daily",
@@ -41,7 +44,7 @@ export async function GET() {
   // (they're aggregation pages, not primary content) but still
   // high-frequency since authors publish often.
   const uniqueAuthors = Array.from(
-    new Set(allArticles.map((a) => a.author).filter(Boolean))
+    new Set(publicArticles.map((a) => a.author).filter(Boolean))
   );
   const authorUrls: SitemapUrl[] = uniqueAuthors.map((name) => {
     const slug = name
@@ -75,7 +78,7 @@ ${urls}
   return new Response(xml, {
     headers: {
       "Content-Type": "application/xml; charset=utf-8",
-      "Cache-Control": "public, max-age=3600, s-maxage=3600",
+      "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
     },
   });
 }

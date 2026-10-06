@@ -25,7 +25,7 @@ const FAQS: Array<{ q: string; a: string }> = [
   },
   {
     q: "What's included in the free plan?",
-    a: "5 free articles per month, breaking news alerts, and newsletter signup. No credit card required.",
+    a: "3 free articles per month and newsletter signup. No credit card required.",
   },
   {
     q: "Do you offer student discounts?",
@@ -45,7 +45,7 @@ const tiers = [
     icon: BookOpen,
     accent: "border-stone-300",
     features: [
-      "5 free articles per month",
+      "3 free articles per month",
       "Standard quality ads",
       "Breaking news alerts",
       "Newsletter signup",
@@ -74,7 +74,7 @@ const tiers = [
     ],
     notIncluded: [],
     cta: "Subscribe Now",
-    ctaHref: "/api/checkout?tier=digital",
+    ctaHref: "/member/subscribe?plan=digital",
   },
   {
     name: "All Access",
@@ -93,7 +93,7 @@ const tiers = [
     ],
     notIncluded: [],
     cta: "Go All Access",
-    ctaHref: "/api/checkout?tier=allaccess",
+    ctaHref: "/member/subscribe?plan=allaccess",
   },
 ];
 

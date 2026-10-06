@@ -173,7 +173,7 @@ export default function NewslettersPage() {
                 },
                 {
                   title: "Unsubscribe anytime",
-                  body: "One click and you're out. We make it easy to leave, which is why people stay.",
+                  body: "Request a secure opt-out link at any time. Only the address owner can confirm an unsubscribe.",
                 },
               ].map((item) => (
                 <div
@@ -191,6 +191,23 @@ export default function NewslettersPage() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            <div className="mt-10 flex flex-col gap-4 border-t border-stone-200 pt-6 dark:border-stone-800 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="font-headline text-xl font-bold text-black dark:text-white">
+                  Already subscribed?
+                </h2>
+                <p className="mt-1 font-sans text-sm text-stone-600 dark:text-stone-400">
+                  Request a secure link to unsubscribe from all Daily Post newsletters.
+                </p>
+              </div>
+              <Link
+                href="/unsubscribe"
+                className="inline-flex h-10 shrink-0 items-center justify-center bg-black px-4 font-sans text-xs font-bold uppercase tracking-wider text-white hover:bg-stone-800 dark:bg-white dark:text-black dark:hover:bg-stone-200"
+              >
+                Unsubscribe
+              </Link>
             </div>
           </div>
         </section>

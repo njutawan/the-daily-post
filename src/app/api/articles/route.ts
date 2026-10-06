@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getSessionUser, requireRole, type Role } from "@/lib/auth-unified";
 import { logger } from "@/lib/logger";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimitResponse } from "@/lib/rate-limit";
 
 const CreateArticleSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters").max(200),
   excerpt: z.string().max(500).optional().nullable(),
+  premium: z.boolean().optional().default(false),
   body: z.string().max(50000).optional().default(""),
   category: z.enum([
     "politics", "world", "business", "tech",
@@ -149,7 +150,14 @@ export async function GET(req: NextRequest) {
       db.article.count({ where }),
     ]);
 
-    return NextResponse.json({ articles, total, limit, offset });
+    const visibleArticles = user.role === "editor" || user.role === "admin"
+      ? articles
+      : articles.map(({ body: _protectedBody, ...article }) => article);
+
+    return NextResponse.json(
+      { articles: visibleArticles, total, limit, offset },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   } catch (err) {
     logger.error({ err }, "[api/articles] GET failed");
     return NextResponse.json({ error: "Failed to fetch articles" }, { status: 500 });
@@ -169,10 +177,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Only editors can create articles" }, { status: 403 });
   }
 
-  const limit = rateLimit(req, { max: 20, windowMs: 60_000 });
-  if (!limit.ok) {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
-  }
+  const limit = await rateLimitResponse(req, { max: 20, windowMs: 60_000 });
+  if (limit) return limit;
 
   const body = await req.json().catch(() => null);
   const parsed = CreateArticleSchema.safeParse(body);
@@ -190,6 +196,7 @@ export async function POST(req: NextRequest) {
     const created = await createWithUniqueSlug(baseSlug, {
       title: data.title,
       excerpt: data.excerpt,
+      premium: data.premium,
       body: data.body,
       category: data.category,
       tags: data.tags,
