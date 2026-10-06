@@ -5,6 +5,11 @@ import {
   rateLimitResponse,
 } from "@/lib/rate-limit";
 
+// `@types/node` marks NODE_ENV as read-only; tests legitimately need to
+// toggle it to exercise the production fail-closed paths, so use a
+// writable view of process.env.
+const env = process.env as Record<string, string | undefined>;
+
 const originalUpstashUrl = process.env.UPSTASH_REDIS_REST_URL;
 const originalUpstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
 const originalRateLimitIpHeader = process.env.RATE_LIMIT_CLIENT_IP_HEADER;
@@ -13,7 +18,7 @@ const originalVercel = process.env.VERCEL;
 
 beforeEach(() => {
   // These tests exercise the local-development fallback regardless of the CI environment.
-  process.env.NODE_ENV = "test";
+  env.NODE_ENV = "test";
   process.env.VERCEL = "";
   delete process.env.UPSTASH_REDIS_REST_URL;
   delete process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -30,8 +35,8 @@ afterAll(() => {
   if (originalRateLimitIpHeader === undefined) delete process.env.RATE_LIMIT_CLIENT_IP_HEADER;
   else process.env.RATE_LIMIT_CLIENT_IP_HEADER = originalRateLimitIpHeader;
 
-  if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
-  else process.env.NODE_ENV = originalNodeEnv;
+  if (originalNodeEnv === undefined) delete env.NODE_ENV;
+  else env.NODE_ENV = originalNodeEnv;
 
   if (originalVercel === undefined) delete process.env.VERCEL;
   else process.env.VERCEL = originalVercel;
@@ -108,7 +113,7 @@ describe("rateLimit", () => {
 
   it("fails closed with HTTP 503 when production Redis credentials are absent", async () => {
     const originalNodeEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
+    env.NODE_ENV = "production";
 
     try {
       const response = await rateLimitByKeyResponse("production-test", {
@@ -117,14 +122,14 @@ describe("rateLimit", () => {
       });
       expect(response?.status).toBe(503);
     } finally {
-      if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
-      else process.env.NODE_ENV = originalNodeEnv;
+      if (originalNodeEnv === undefined) delete env.NODE_ENV;
+      else env.NODE_ENV = originalNodeEnv;
     }
   });
 
   it("fails closed when production has no trusted client-IP source", async () => {
     const originalNodeEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
+    env.NODE_ENV = "production";
     process.env.UPSTASH_REDIS_REST_URL = "https://redis.example.com";
     process.env.UPSTASH_REDIS_REST_TOKEN = "test-token";
 
@@ -135,8 +140,8 @@ describe("rateLimit", () => {
       });
       expect(response?.status).toBe(503);
     } finally {
-      if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
-      else process.env.NODE_ENV = originalNodeEnv;
+      if (originalNodeEnv === undefined) delete env.NODE_ENV;
+      else env.NODE_ENV = originalNodeEnv;
       delete process.env.UPSTASH_REDIS_REST_URL;
       delete process.env.UPSTASH_REDIS_REST_TOKEN;
     }

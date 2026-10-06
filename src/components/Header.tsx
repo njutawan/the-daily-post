@@ -360,10 +360,7 @@ export function Header() {
       )}
 
       <SearchCommand open={searchOpen} onOpenChange={setSearchOpen} />
-      <MobileBottomNav
-        onOpenSearch={() => setSearchOpen(true)}
-        onOpenSections={() => setOpen(true)}
-      />
+      <MobileBottomNav onOpenSearch={() => setSearchOpen(true)} />
     </header>
   );
 }
