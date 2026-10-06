@@ -9,7 +9,17 @@ const { mockDb, mockRequireRole, mockRateLimit } = vi.hoisted(() => ({
 
 vi.mock("@/lib/db", () => ({ db: mockDb }));
 vi.mock("@/lib/auth-unified", () => ({ requireRole: mockRequireRole }));
-vi.mock("@/lib/rate-limit", () => ({ rateLimit: mockRateLimit }));
+vi.mock("@/lib/rate-limit", () => ({
+  rateLimit: mockRateLimit,
+  // The route uses the convenience wrapper; mirror its contract (null when
+  // allowed, a 429 Response when limited) while staying driven by mockRateLimit.
+  rateLimitResponse: vi.fn(async () => {
+    const result = await mockRateLimit();
+    return result && result.ok === false
+      ? new Response(JSON.stringify({ error: "Too many requests" }), { status: 429 })
+      : null;
+  }),
+}));
 
 import { PATCH } from "./route";
 
